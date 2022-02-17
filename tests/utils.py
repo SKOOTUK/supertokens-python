@@ -113,6 +113,7 @@ def __stop_st(retry=50):
 
 def start_st(host='localhost', port='3567'):
     pid_after = pid_before = __get_list_of_process_ids()
+    print(f"PATH: {INSTALLATION_PATH}")
     run('cd ' + INSTALLATION_PATH + ' && java -Djava.security.egd=file:/dev/urandom -classpath '
                                     '"./core/*:./plugin-interface/*" io.supertokens.Main ./ DEV host='
         + host + ' port=' + str(port) + ' &', shell=True, stdout=DEVNULL)
