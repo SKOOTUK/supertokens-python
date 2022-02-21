@@ -25,7 +25,7 @@ class FalconRequest(BaseRequest):
     def get_query_param(self, key, default=None):
         return self.request.params.get(key, default)
 
-    async def json(self):
+    def json(self):
         try:
             return self.request.media
         except Exception:
@@ -55,5 +55,5 @@ class FalconRequest(BaseRequest):
     def get_path(self) -> str:
         return self.request.path
 
-    async def form_data(self):
+    def form_data(self):
         return self.request.get_media()

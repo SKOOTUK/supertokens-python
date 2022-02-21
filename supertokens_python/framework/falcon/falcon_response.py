@@ -13,8 +13,7 @@
 # under the License.
 
 import json
-from math import ceil
-from time import time
+from datetime import datetime
 
 from supertokens_python.framework.response import BaseResponse
 
@@ -24,7 +23,7 @@ class FalconResponse(BaseResponse):
     def __init__(self, resp=None):
         super().__init__({})
         self.response = resp
-        self.headers = dict()
+        self.headers = resp.headers
         self.response_sent = False
         self.status_set = False
 
@@ -49,7 +48,7 @@ class FalconResponse(BaseResponse):
         self.response.set_cookie(
             key,
             value,
-            expires=ceil((expires - int(time() * 1000)) / 1000),
+            expires=datetime.utcfromtimestamp(expires / 1000),
             max_age=max_age,
             domain=domain,
             path=path,
@@ -57,6 +56,9 @@ class FalconResponse(BaseResponse):
             http_only=httponly,
             same_site=samesite
         )
+
+        for item in self.response._wsgi_headers():
+            self.response.append_header(item[0], item[1])
 
     def set_header(self, key, value):
         self.response.set_header(key, value)

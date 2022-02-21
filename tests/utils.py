@@ -113,7 +113,6 @@ def __stop_st(retry=50):
 
 def start_st(host='localhost', port='3567'):
     pid_after = pid_before = __get_list_of_process_ids()
-    print(f"PATH: {INSTALLATION_PATH}")
     run('cd ' + INSTALLATION_PATH + ' && java -Djava.security.egd=file:/dev/urandom -classpath '
                                     '"./core/*:./plugin-interface/*" io.supertokens.Main ./ DEV host='
         + host + ' port=' + str(port) + ' &', shell=True, stdout=DEVNULL)
@@ -205,6 +204,30 @@ def extract_all_cookies(response: Response):
                 cookies[key][k] = v
             else:
                 cookies[key][k] = v
+    return cookies
+
+
+def extract_falcon_cookies(response: Response):
+    cookies = dict()
+    for key, cookie in response._cookies.items():
+        cookies[key] = {
+            'value': cookie.value,
+            'name': key
+        }
+        for name in (
+            'expires',
+            'path',
+            'domain',
+            'max_age',
+        ):
+            cookies[key][name] = getattr(cookie, name)
+
+        cookies[key]['secure'] = getattr(cookie, 'secure') or None
+        cookies[key]['http_only'] = getattr(cookie, 'http_only') or None
+        samesite = getattr(cookie, 'same_site')
+        if len(samesite) > 0 and samesite[-1] == ',':
+            samesite = samesite[:-1]
+        cookies[key]['same_site'] = samesite
     return cookies
 
 

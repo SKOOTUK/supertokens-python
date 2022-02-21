@@ -44,12 +44,14 @@ class Middleware:
             return result.response
 
     def process_response(self, req, resp, resource, req_succeeded):
+        from supertokens_python.framework.falcon.falcon_request import FalconRequest
         from supertokens_python.framework.falcon.falcon_response import FalconResponse
         from supertokens_python.recipe.session import Session
         from supertokens_python.supertokens import manage_cookies_post_response
 
         response_ = FalconResponse(resp)
-        session = req.get_session()
+        request_ = FalconRequest(req)
+        session = request_.get_session()
 
         if isinstance(session, Session):
             manage_cookies_post_response(session, response_)

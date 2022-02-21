@@ -27,10 +27,10 @@ def verify_session(
 ):
     def session_verify(f):
         @wraps(f)
-        def wrapped_function(request, *args, **kwargs):
+        def wrapped_function(resource, req, resp, **kwargs):
             from falcon.response import Response
             try:
-                request = FalconRequest(request)
+                request = FalconRequest(req)
                 recipe = SessionRecipe.get_instance()
                 session = sync(
                     recipe.verify_session(
@@ -40,7 +40,7 @@ def verify_session(
                     )
                 )
                 request.set_session(session)
-                return f(request.request, *args, **kwargs)
+                return f(resource, request.request, resp, **kwargs)
             except SuperTokensError as e:
                 response = FalconResponse(Response())
                 result = sync(
