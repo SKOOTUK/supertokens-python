@@ -44,10 +44,7 @@ class FalconRequest(BaseRequest):
         return self.request.url
 
     def get_session(self):
-        try:
-            return self.request.context.supertokens
-        except AttributeError:
-            return None
+        return getattr(self.request.context, "supertokens", None)
 
     def set_session(self, session):
         self.request.context.supertokens = session
