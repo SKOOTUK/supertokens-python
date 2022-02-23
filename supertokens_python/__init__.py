@@ -25,7 +25,7 @@ except ImportError:
 
 
 def init(app_info: InputAppInfo,
-         framework: Literal['fastapi', 'flask', 'django'],
+         framework: Literal['fastapi', 'flask', 'django', 'falcon'],
          supertokens_config: SupertokensConfig,
          recipe_list: List[Callable[[AppInfo], RecipeModule]],
          mode: Union[Literal['asgi', 'wsgi'], None] = None,

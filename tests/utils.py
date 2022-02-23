@@ -207,6 +207,30 @@ def extract_all_cookies(response: Response):
     return cookies
 
 
+def extract_falcon_cookies(response: Response):
+    cookies = dict()
+    for key, cookie in response._cookies.items():
+        cookies[key] = {
+            'value': cookie.value,
+            'name': key
+        }
+        for name in (
+            'expires',
+            'path',
+            'domain',
+            'max_age',
+        ):
+            cookies[key][name] = getattr(cookie, name)
+
+        cookies[key]['secure'] = getattr(cookie, 'secure') or None
+        cookies[key]['http_only'] = getattr(cookie, 'http_only') or None
+        samesite = getattr(cookie, 'same_site')
+        if len(samesite) > 0 and samesite[-1] == ',':
+            samesite = samesite[:-1]
+        cookies[key]['same_site'] = samesite
+    return cookies
+
+
 def get_unix_timestamp(expiry):
     return int(datetime.strptime(
         expiry, '%a, %d %b %Y %H:%M:%S GMT').replace(tzinfo=timezone.utc).timestamp())

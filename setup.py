@@ -21,6 +21,7 @@ extras_require = {
         'Fastapi==0.68.1',
         'django',
         'Flask==2.0.1',
+        'falcon==3.0.1',
         'python-dotenv',
         'flask_cors',
         'django-cors-headers',

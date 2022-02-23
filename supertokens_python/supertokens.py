@@ -91,7 +91,7 @@ class InputAppInfo:
 
 class AppInfo:
     def __init__(self, app_name: str, api_domain: str, website_domain: str,
-                 framework: Literal['fastapi', 'flask', 'django'], api_gateway_path: str = '',
+                 framework: Literal['fastapi', 'flask', 'django', 'falcon'], api_gateway_path: str = '',
                  api_base_path: str = '/auth', website_base_path: str = '/auth',
                  mode: Union[Literal['asgi', 'wsgi'], None] = None):
         self.app_name = app_name
@@ -156,7 +156,7 @@ class Supertokens:
 
     def __init__(self,
                  app_info: InputAppInfo,
-                 framework: Literal['fastapi', 'flask', 'django'],
+                 framework: Literal['fastapi', 'flask', 'django', 'falcon'],
                  supertokens_config: SupertokensConfig,
                  recipe_list: List[Callable[[AppInfo], RecipeModule]],
                  mode: Union[Literal['asgi', 'wsgi'], None] = None,
@@ -186,7 +186,11 @@ class Supertokens:
             telemetry = ('SUPERTOKENS_ENV' not in environ) or (environ['SUPERTOKENS_ENV'] != 'testing')
 
         if telemetry:
-            if self.app_info.framework.lower() == 'flask' or self.app_info.framework.lower() == 'django':
+            if (
+                self.app_info.framework.lower() == 'flask' or
+                self.app_info.framework.lower() == 'django' or
+                self.app_info.framework.lower() == 'falcon'
+            ):
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(self.send_telemetry())
             else:
@@ -217,7 +221,7 @@ class Supertokens:
 
     @staticmethod
     def init(app_info: InputAppInfo,
-             framework: Literal['fastapi', 'flask', 'django'],
+             framework: Literal['fastapi', 'flask', 'django', 'falcon'],
              supertokens_config: SupertokensConfig,
              recipe_list: List[Callable[[AppInfo], RecipeModule]],
              mode: Union[Literal['asgi', 'wsgi'], None] = None,

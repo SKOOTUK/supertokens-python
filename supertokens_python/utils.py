@@ -34,6 +34,7 @@ from base64 import b64encode, b64decode
 from supertokens_python.framework.django.framework import DjangoFramework
 from supertokens_python.framework.fastapi.framework import FastapiFramework
 from supertokens_python.framework.flask.framework import FlaskFramework
+from supertokens_python.framework.falcon.framework import FalconFramework
 from supertokens_python.async_to_sync_wrapper import check_event_loop
 import asyncio
 
@@ -41,6 +42,7 @@ FRAMEWORKS = {
     'fastapi': FastapiFramework(),
     'flask': FlaskFramework(),
     'django': DjangoFramework(),
+    'falcon': FalconFramework(),
 }
 
 
