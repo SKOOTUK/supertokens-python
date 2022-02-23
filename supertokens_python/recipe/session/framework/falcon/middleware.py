@@ -23,48 +23,64 @@ from supertokens_python.recipe.session import SessionRecipe
 
 
 def verify_session(
-    anti_csrf_check: Union[bool, None] = None, session_required: bool = True
+    req: FalconRequest,
+    anti_csrf_check: Union[bool, None] = None,
+    session_required: bool = True
 ):
-    def session_verify(f):
-        @wraps(f)
-        def wrapped_function(resource, req, resp, **kwargs):
-            from falcon.response import Response
-            print(f"FUNCTION: {f}")
-            print(f"RESOURCE: {resource}")
-            print(f"REQUEST: {req}")
-            print(f"RESPONSE: {resp}")
-            try:
-                print("STEP 1")
-                request = FalconRequest(req)
-                print("STEP 2")
-                recipe = SessionRecipe.get_instance()
-                print("STEP 3")
-                session = sync(
-                    recipe.verify_session(
-                        request,
-                        anti_csrf_check,
-                        session_required
-                    )
-                )
-                print("STEP 4")
-                print(session)
-                request.set_session(session)
-                print("STEP 5")
-                print(f"RUNNING FUNCTION {f}")
-                return f(resource, request.request, resp, **kwargs)
-            except SuperTokensError as e:
-                print("EXCEPTION 1")
-                response = FalconResponse(Response())
-                print("EXCEPTION 2")
-                result = sync(
-                    Supertokens.get_instance().handle_supertokens_error(
-                        FalconRequest(request), e, response
-                    )
-                )
-                print("EXCEPTION 3")
-                print(f"RESULT: {result}")
-                return result.response
+    request = FalconRequest(req)
+    recipe = SessionRecipe.get_instance()
+    session = sync(
+        recipe.verify_session(
+            request,
+            anti_csrf_check,
+            session_required
+        )
+    )
+    request.set_session(session)
 
-        return wrapped_function
+# def verify_session(
+#     anti_csrf_check: Union[bool, None] = None, session_required: bool = True
+# ):
+#     def session_verify(f):
+#         @wraps(f)
+#         def wrapped_function(resource, req, resp, **kwargs):
+#             from falcon.response import Response
+#             print(f"FUNCTION: {f}")
+#             print(f"RESOURCE: {resource}")
+#             print(f"REQUEST: {req}")
+#             print(f"RESPONSE: {resp}")
+#             try:
+#                 print("STEP 1")
+#                 request = FalconRequest(req)
+#                 print("STEP 2")
+#                 recipe = SessionRecipe.get_instance()
+#                 print("STEP 3")
+#                 session = sync(
+#                     recipe.verify_session(
+#                         request,
+#                         anti_csrf_check,
+#                         session_required
+#                     )
+#                 )
+#                 print("STEP 4")
+#                 print(session)
+#                 request.set_session(session)
+#                 print("STEP 5")
+#                 print(f"RUNNING FUNCTION {f}")
+#                 return f(resource, request.request, resp, **kwargs)
+#             except SuperTokensError as e:
+#                 print("EXCEPTION 1")
+#                 response = FalconResponse(Response())
+#                 print("EXCEPTION 2")
+#                 result = sync(
+#                     Supertokens.get_instance().handle_supertokens_error(
+#                         FalconRequest(request), e, response
+#                     )
+#                 )
+#                 print("EXCEPTION 3")
+#                 print(f"RESULT: {result}")
+#                 return result.response
 
-    return session_verify
+#         return wrapped_function
+
+#     return session_verify

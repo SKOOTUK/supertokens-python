@@ -117,8 +117,8 @@ class GenericResource:
         resp.media = {'s': session.get_handle()}
         return resp
 
-    @verify_session(session_required=False)
     def on_post_custom_logout(self, req, resp):
+        verify_session(req, session_required=False)
         resp.media = {}
         session = get_session(req, False)
         revoke_session(session.get_handle())
@@ -228,6 +228,7 @@ def test_login_logout(driver_config_client: testing.TestClient):
 
     cookies_2 = extract_falcon_cookies(response_2)
     assert cookies_2 == {}
+    assert response_2.status_code == 200
 
     response_3 = driver_config_client.simulate_post(
         '/logout',
@@ -236,7 +237,8 @@ def test_login_logout(driver_config_client: testing.TestClient):
         }
     )
 
-    assert response_3.status_code == 200
+    assert response_3.status_code == 401
+    assert response_3.json == {'message': 'unauthorised'}
 
 
 def test_login_info(driver_config_client: testing.TestClient):
