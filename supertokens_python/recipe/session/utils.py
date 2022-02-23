@@ -20,8 +20,6 @@ except ImportError:
     from typing_extensions import Literal
 from urllib.parse import urlparse
 
-from tldextract import extract
-
 from supertokens_python.exceptions import raise_general_exception
 from supertokens_python.framework import BaseResponse
 from supertokens_python.normalised_url_path import NormalisedURLPath
@@ -36,6 +34,21 @@ if TYPE_CHECKING:
     from supertokens_python.framework import BaseRequest
     from .recipe import SessionRecipe
     from supertokens_python.supertokens import AppInfo
+
+
+def no_fetch_extract(url, include_psl_private_domains=False):
+    from tldextract import TLDExtract
+    from functools import wraps
+
+    TLD_EXTRACTOR = TLDExtract(suffix_list_urls=None)
+
+    @wraps(TLD_EXTRACTOR.__call__)
+    def extract(url, include_psl_private_domains):
+        return TLD_EXTRACTOR(
+            url, include_psl_private_domains=include_psl_private_domains
+        )
+
+    return extract(url, include_psl_private_domains)
 
 
 def normalise_session_scope(recipe: SessionRecipe, session_scope: str) -> str:
@@ -91,7 +104,7 @@ def get_top_level_domain_for_same_site_resolution(url: str) -> str:
 
     if hostname.startswith('localhost') or is_an_ip_address(hostname):
         return 'localhost'
-    parsed_url = extract(hostname)
+    parsed_url = no_fetch_extract(hostname)
     if parsed_url == '':
         raise Exception(
             'Please make sure that the apiDomain and websiteDomain have correct values')
