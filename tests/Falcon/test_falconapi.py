@@ -13,6 +13,7 @@
 # under the License.
 from uuid import UUID
 
+import falcon
 from falcon import App, testing
 
 from pytest import fixture
@@ -117,8 +118,8 @@ class GenericResource:
         resp.media = {'s': session.get_handle()}
         return resp
 
+    @falcon.before(verify_session)
     def on_post_custom_logout(self, req, resp):
-        verify_session(req, session_required=False)
         resp.media = {}
         session = get_session(req, False)
         revoke_session(session.get_handle())
@@ -194,7 +195,6 @@ def test_login_refresh(driver_config_client: testing.TestClient):
 
 def test_login_logout(driver_config_client: testing.TestClient):
     init_st()
-
     response_1 = driver_config_client.simulate_get('/login')
     cookies_1 = extract_falcon_cookies(response_1)
 
