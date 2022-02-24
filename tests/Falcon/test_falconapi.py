@@ -238,7 +238,10 @@ def test_login_logout(driver_config_client: testing.TestClient):
     )
 
     assert response_3.status_code == 401
-    assert response_3.json == {'message': 'unauthorised'}
+    assert response_3.json == {
+        'title': '401 Unauthorized',
+        'description': 'Authorization data is incorrect or missing'
+    }
 
 
 def test_login_info(driver_config_client: testing.TestClient):

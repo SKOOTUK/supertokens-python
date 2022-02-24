@@ -11,6 +11,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+import falcon
 from typing import Union
 
 from supertokens_python.async_to_sync_wrapper import sync
@@ -44,6 +45,9 @@ def verify_session(
         )
     except UnauthorisedError as e:
         logger.info(f"Authorization Error: {e}")
-        raise e
+        raise falcon.HTTPUnauthorized(
+            title="401 Unauthorized",
+            description="Authorization data is incorrect or missing"
+        )
     else:
         request.set_session(session)
