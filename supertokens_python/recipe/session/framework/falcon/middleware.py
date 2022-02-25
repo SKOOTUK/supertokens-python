@@ -18,7 +18,7 @@ from supertokens_python.async_to_sync_wrapper import sync
 from supertokens_python.framework.falcon.falcon_request import FalconRequest
 from supertokens_python.framework.falcon.falcon_response import FalconResponse
 from supertokens_python.recipe.session import SessionRecipe
-from supertokens_python.recipe.session.exceptions import UnauthorisedError
+from supertokens_python.recipe.session.exceptions import SuperTokensError
 from supertokens_python.recipe.session.framework.falcon.log import set_logger
 
 logger = set_logger()
@@ -43,11 +43,11 @@ def verify_session(
                 session_required
             )
         )
-    except UnauthorisedError as e:
+    except SuperTokensError as e:
         logger.info(f"Authorization Error: {e}")
         raise falcon.HTTPUnauthorized(
             title="401 Unauthorized",
-            description="Authorization data is incorrect or missing"
+            description=f"Authorization Error. Got: '{e}'"
         )
     else:
         request.set_session(session)

@@ -240,7 +240,26 @@ def test_login_logout(driver_config_client: testing.TestClient):
     assert response_3.status_code == 401
     assert response_3.json == {
         'title': '401 Unauthorized',
-        'description': 'Authorization data is incorrect or missing'
+        'description': (
+            "Authorization Error. Got: 'Session does not exist. "
+            "Are you sending the session tokens in the request as cookies?'"
+        )
+    }
+
+def test_logout_wrong_credentials(driver_config_client: testing.TestClient):
+    init_st()
+
+    response_1 = driver_config_client.simulate_post(
+        '/logout',
+        cookies={
+            'sAccessToken': 'wrongtoken',
+            'sIdRefreshToken': 'badtoken'
+        }
+    )
+    assert response_1.status_code == 401
+    assert response_1.json == {
+        'title': '401 Unauthorized',
+        'description': "Authorization Error. Got: 'invalid jwt'"
     }
 
 
