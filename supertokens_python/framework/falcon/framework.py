@@ -18,8 +18,10 @@ from supertokens_python.framework.types import Framework
 
 
 class FalconFramework(Framework):
-    def wrap_request(self, unwrapped):
+    from falcon import Request, Response
+
+    def wrap_request(self, unwrapped: Request):
         return FalconRequest(unwrapped)
 
-    def wrap_response(self, unwrapped):
+    def wrap_response(self, unwrapped: Response):
         return FalconResponse(unwrapped)

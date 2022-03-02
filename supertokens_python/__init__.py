@@ -12,26 +12,27 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from . import exceptions
-from .supertokens import Supertokens
-from .recipe import session
-from typing import List, Union, Callable
-from .supertokens import SupertokensConfig, InputAppInfo, AppInfo
+from typing_extensions import Literal
+from typing import Callable, List, Union
+
+from . import supertokens
 from .recipe_module import RecipeModule
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal
+
+InputAppInfo = supertokens.InputAppInfo
+Supertokens = supertokens.Supertokens
+SupertokensConfig = supertokens.SupertokensConfig
+AppInfo = supertokens.AppInfo
 
 
 def init(app_info: InputAppInfo,
          framework: Literal['fastapi', 'flask', 'django', 'falcon'],
          supertokens_config: SupertokensConfig,
-         recipe_list: List[Callable[[AppInfo], RecipeModule]],
+         recipe_list: List[Callable[[supertokens.AppInfo], RecipeModule]],
          mode: Union[Literal['asgi', 'wsgi'], None] = None,
          telemetry: Union[bool, None] = None):
-    return Supertokens.init(app_info, framework, supertokens_config, recipe_list, mode, telemetry)
+    return Supertokens.init(app_info, framework,
+                            supertokens_config, recipe_list, mode, telemetry)
 
 
-def get_all_cors_headers():
-    return Supertokens.get_instance().get_all_cors_headers()
+def get_all_cors_headers() -> List[str]:
+    return supertokens.Supertokens.get_instance().get_all_cors_headers()

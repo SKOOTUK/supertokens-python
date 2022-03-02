@@ -12,7 +12,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import json
 from supertokens_python.async_to_sync_wrapper import sync
 
 
@@ -21,8 +20,10 @@ class Middleware:
     @staticmethod
     def error_handler(req, resp, error, params):
         from supertokens_python import Supertokens
-        from supertokens_python.framework.falcon.falcon_request import FalconRequest
-        from supertokens_python.framework.falcon.falcon_response import FalconResponse
+        from supertokens_python.framework.falcon.falcon_request import \
+            FalconRequest
+        from supertokens_python.framework.falcon.falcon_response import \
+            FalconResponse
 
         st = Supertokens.get_instance()
         response = FalconResponse(resp)
@@ -31,8 +32,10 @@ class Middleware:
 
     def process_resource(self, req, resp, resource, params):
         from supertokens_python import Supertokens
-        from supertokens_python.framework.falcon.falcon_request import FalconRequest
-        from supertokens_python.framework.falcon.falcon_response import FalconResponse
+        from supertokens_python.framework.falcon.falcon_request import \
+            FalconRequest
+        from supertokens_python.framework.falcon.falcon_response import \
+            FalconResponse
 
         st = Supertokens.get_instance()
 
@@ -44,16 +47,18 @@ class Middleware:
             return result.response
 
     def process_response(self, req, resp, resource, req_succeeded):
-        from supertokens_python.framework.falcon.falcon_request import FalconRequest
-        from supertokens_python.framework.falcon.falcon_response import FalconResponse
-        from supertokens_python.recipe.session import Session
+        from supertokens_python.framework.falcon.falcon_request import \
+            FalconRequest
+        from supertokens_python.framework.falcon.falcon_response import \
+            FalconResponse
+        from supertokens_python.recipe.session import SessionContainer
         from supertokens_python.supertokens import manage_cookies_post_response
 
         response_ = FalconResponse(resp)
         request_ = FalconRequest(req)
         session = request_.get_session()
 
-        if isinstance(session, Session):
+        if isinstance(session, SessionContainer):
             manage_cookies_post_response(session, response_)
 
         return response_.response

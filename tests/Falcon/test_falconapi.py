@@ -15,31 +15,21 @@ from uuid import UUID
 
 import falcon
 from falcon import App, testing
-
 from pytest import fixture
-
-from supertokens_python import init, SupertokensConfig, InputAppInfo
-from supertokens_python.recipe import session
+from supertokens_python import InputAppInfo, SupertokensConfig, init
 from supertokens_python.exceptions import SuperTokensError
 from supertokens_python.framework.falcon import Middleware
-
+from supertokens_python.recipe import session
 from supertokens_python.recipe.session.framework.falcon import verify_session
-from supertokens_python.recipe.session.syncio import (
-    create_new_session,
-    refresh_session,
-    get_session,
-    revoke_session
-)
-from tests.utils import (
-    reset, setup_st,
-    clean_st,
-    start_st,
-    extract_falcon_cookies,
-    TEST_DRIVER_CONFIG_ACCESS_TOKEN_PATH,
-    TEST_DRIVER_CONFIG_COOKIE_DOMAIN,
-    TEST_DRIVER_CONFIG_COOKIE_SAME_SITE,
-    TEST_DRIVER_CONFIG_REFRESH_TOKEN_PATH
-)
+from supertokens_python.recipe.session.syncio import (create_new_session,
+                                                      get_session,
+                                                      refresh_session,
+                                                      revoke_session)
+from tests.utils import (TEST_DRIVER_CONFIG_ACCESS_TOKEN_PATH,
+                         TEST_DRIVER_CONFIG_COOKIE_DOMAIN,
+                         TEST_DRIVER_CONFIG_COOKIE_SAME_SITE,
+                         TEST_DRIVER_CONFIG_REFRESH_TOKEN_PATH, clean_st,
+                         extract_falcon_cookies, reset, setup_st, start_st)
 
 
 def is_valid_uuid(value):

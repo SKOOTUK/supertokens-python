@@ -11,8 +11,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-import falcon
-from typing import Union
+from typing import Any, Dict, Union
 
 from supertokens_python.async_to_sync_wrapper import sync
 from supertokens_python.framework.falcon.falcon_request import FalconRequest
@@ -20,6 +19,8 @@ from supertokens_python.framework.falcon.falcon_response import FalconResponse
 from supertokens_python.recipe.session import SessionRecipe
 from supertokens_python.recipe.session.exceptions import SuperTokensError
 from supertokens_python.recipe.session.framework.falcon.log import set_logger
+
+import falcon
 
 logger = set_logger()
 
@@ -30,7 +31,8 @@ def verify_session(
     resource,
     params,
     anti_csrf_check: Union[bool, None] = None,
-    session_required: bool = True
+    session_required: bool = True,
+    user_context: Union[None, Dict[str, Any]] = None
 ):
     request = FalconRequest(req)
     recipe = SessionRecipe.get_instance()
@@ -40,7 +42,8 @@ def verify_session(
             recipe.verify_session(
                 request,
                 anti_csrf_check,
-                session_required
+                session_required,
+                user_context
             )
         )
     except SuperTokensError as e:

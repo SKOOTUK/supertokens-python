@@ -2,8 +2,8 @@
 
 asgiref~=3.5.0
 werkzeug~=2.0.0
-Flask==2.0.1
-django==3
+Flask==2.0.2
+django==3.2.12
 django-cors-headers==3.10
 uvicorn==0.13.4
 nest-asyncio==1.5.4

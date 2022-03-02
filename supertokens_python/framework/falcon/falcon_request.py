@@ -13,6 +13,7 @@
 # under the License.
 
 from typing import Any, Union
+
 from supertokens_python.framework.request import BaseRequest
 
 
@@ -25,7 +26,7 @@ class FalconRequest(BaseRequest):
     def get_query_param(self, key, default=None):
         return self.request.params.get(key, default)
 
-    def json(self):
+    async def json(self):
         try:
             return self.request.media
         except Exception:
