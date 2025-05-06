@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.emailverification API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,14 +41,22 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
+from ...ingredients.emaildelivery.types import EmailDeliveryConfig
 from . import exceptions as ex
+from . import recipe, types, utils
+from .emaildelivery import services as emaildelivery_services
+from .interfaces import TypeGetEmailForUserIdFunction
 from .recipe import EmailVerificationRecipe
-from . import utils
+from .types import EmailTemplateVars
+from .utils import MODE_TYPE, OverrideConfig
+
 InputOverrideConfig = utils.OverrideConfig
-ParentRecipeEmailVerificationConfig = utils.ParentRecipeEmailVerificationConfig
 exception = ex
+SMTPService = emaildelivery_services.SMTPService
+EmailVerificationClaim = recipe.EmailVerificationClaim
+EmailDeliveryInterface = types.EmailDeliveryInterface
 
 
 if TYPE_CHECKING:
@@ -57,8 +65,18 @@ if TYPE_CHECKING:
     from ...recipe_module import RecipeModule
 
 
-def init(config: ParentRecipeEmailVerificationConfig) -&gt; Callable[[AppInfo], RecipeModule]:
-    return EmailVerificationRecipe.init(config)</code></pre>
+def init(
+    mode: MODE_TYPE,
+    email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None,
+    get_email_for_recipe_user_id: Optional[TypeGetEmailForUserIdFunction] = None,
+    override: Union[OverrideConfig, None] = None,
+) -&gt; Callable[[AppInfo], RecipeModule]:
+    return EmailVerificationRecipe.init(
+        mode,
+        email_delivery,
+        get_email_for_recipe_user_id,
+        override,
+    )</code></pre>
 </details>
 </section>
 <section>
@@ -73,6 +91,10 @@ def init(config: ParentRecipeEmailVerificationConfig) -&gt; Callable[[AppInfo], 
 <div class="desc"></div>
 </dd>
 <dt><code class="name"><a title="supertokens_python.recipe.emailverification.constants" href="constants.html">supertokens_python.recipe.emailverification.constants</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt><code class="name"><a title="supertokens_python.recipe.emailverification.emaildelivery" href="emaildelivery/index.html">supertokens_python.recipe.emailverification.emaildelivery</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -112,17 +134,10 @@ def init(config: ParentRecipeEmailVerificationConfig) -&gt; Callable[[AppInfo], 
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="supertokens_python.recipe.emailverification.init"><code class="name flex">
-<span>def <span class="ident">init</span></span>(<span>config: ParentRecipeEmailVerificationConfig) ‑> Callable[[AppInfo], RecipeModule]</span>
+<span>def <span class="ident">init</span></span>(<span>mode: MODE_TYPE, email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None, get_email_for_recipe_user_id: Optional[TypeGetEmailForUserIdFunction] = None, override: Union[OverrideConfig, None] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def init(config: ParentRecipeEmailVerificationConfig) -&gt; Callable[[AppInfo], RecipeModule]:
-    return EmailVerificationRecipe.init(config)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -130,7 +145,7 @@ def init(config: ParentRecipeEmailVerificationConfig) -&gt; Callable[[AppInfo], 
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -145,6 +160,7 @@ def init(config: ParentRecipeEmailVerificationConfig) -&gt; Callable[[AppInfo], 
 <li><code><a title="supertokens_python.recipe.emailverification.api" href="api/index.html">supertokens_python.recipe.emailverification.api</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.asyncio" href="asyncio/index.html">supertokens_python.recipe.emailverification.asyncio</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.constants" href="constants.html">supertokens_python.recipe.emailverification.constants</a></code></li>
+<li><code><a title="supertokens_python.recipe.emailverification.emaildelivery" href="emaildelivery/index.html">supertokens_python.recipe.emailverification.emaildelivery</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.exceptions" href="exceptions.html">supertokens_python.recipe.emailverification.exceptions</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.interfaces" href="interfaces.html">supertokens_python.recipe.emailverification.interfaces</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.recipe" href="recipe.html">supertokens_python.recipe.emailverification.recipe</a></code></li>
@@ -163,7 +179,7 @@ def init(config: ParentRecipeEmailVerificationConfig) -&gt; Callable[[AppInfo], 
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

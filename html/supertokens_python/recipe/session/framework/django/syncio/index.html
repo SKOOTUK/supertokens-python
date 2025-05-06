@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.session.framework.django.syncio API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -40,41 +40,77 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 from functools import wraps
-from typing import Any, Callable, Dict, TypeVar, Union, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 
 from supertokens_python import Supertokens
 from supertokens_python.async_to_sync_wrapper import sync
 from supertokens_python.exceptions import SuperTokensError
 from supertokens_python.framework.django.django_request import DjangoRequest
 from supertokens_python.framework.django.django_response import DjangoResponse
-from supertokens_python.recipe.session import SessionRecipe
+from supertokens_python.recipe.session import SessionContainer, SessionRecipe
+from supertokens_python.recipe.session.interfaces import SessionClaimValidator
+from supertokens_python.types import MaybeAwaitable
+from supertokens_python.utils import set_request_in_user_context_if_not_defined
 
-_T = TypeVar(&#39;_T&#39;, bound=Callable[..., Any])
+_T = TypeVar(&#34;_T&#34;, bound=Callable[..., Any])
 
 
-def verify_session(anti_csrf_check: Union[bool, None] = None, session_required: bool = True, user_context: Union[None, Dict[str, Any]] = None) -&gt; Callable[[_T], _T]:
-    if user_context is None:
-        user_context = {}
+def verify_session(
+    anti_csrf_check: Union[bool, None] = None,
+    session_required: bool = True,
+    check_database: bool = False,
+    override_global_claim_validators: Optional[
+        Callable[
+            [List[SessionClaimValidator], SessionContainer, Dict[str, Any]],
+            MaybeAwaitable[List[SessionClaimValidator]],
+        ]
+    ] = None,
+    user_context: Union[None, Dict[str, Any]] = None,
+) -&gt; Callable[[_T], _T]:
+    _ = user_context
 
     def session_verify(f: _T) -&gt; _T:
         from django.http import HttpRequest
 
         @wraps(f)
         def wrapped_function(request: HttpRequest, *args: Any, **kwargs: Any):
+            nonlocal user_context
             from django.http import JsonResponse
+
+            baseRequest = DjangoRequest(request)
             try:
-                baseRequest = DjangoRequest(request)
+                user_context = set_request_in_user_context_if_not_defined(
+                    user_context, baseRequest
+                )
+
                 recipe = SessionRecipe.get_instance()
-                session = sync(recipe.verify_session(baseRequest, anti_csrf_check, session_required, user_context))
+                session = sync(
+                    recipe.verify_session(
+                        baseRequest,
+                        anti_csrf_check,
+                        session_required,
+                        check_database,
+                        override_global_claim_validators,
+                        user_context,
+                    )
+                )
                 if session is None:
                     if session_required:
                         raise Exception(&#34;Should never come here&#34;)
+                    baseRequest.set_session_as_none()
                 else:
                     baseRequest.set_session(session)
                 return f(baseRequest.request, *args, **kwargs)
             except SuperTokensError as e:
                 response = DjangoResponse(JsonResponse({}))
-                result = sync(Supertokens.get_instance().handle_supertokens_error(DjangoRequest(request), e, response))
+                user_context = set_request_in_user_context_if_not_defined(
+                    user_context, baseRequest
+                )
+                result = sync(
+                    Supertokens.get_instance().handle_supertokens_error(
+                        DjangoRequest(request), e, response, user_context
+                    )
+                )
                 if isinstance(result, DjangoResponse):
                     return result.response
                 raise Exception(&#34;Should never come here&#34;)
@@ -92,45 +128,10 @@ def verify_session(anti_csrf_check: Union[bool, None] = None, session_required: 
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="supertokens_python.recipe.session.framework.django.syncio.verify_session"><code class="name flex">
-<span>def <span class="ident">verify_session</span></span>(<span>anti_csrf_check: Optional[bool] = None, session_required: bool = True, user_context: Optional[None] = None) ‑> Callable[[~_T], ~_T]</span>
+<span>def <span class="ident">verify_session</span></span>(<span>anti_csrf_check: Optional[bool] = None, session_required: bool = True, check_database: bool = False, override_global_claim_validators: Optional[Callable[[List[<a title="supertokens_python.recipe.session.interfaces.SessionClaimValidator" href="../../../interfaces.html#supertokens_python.recipe.session.interfaces.SessionClaimValidator">SessionClaimValidator</a>], <a title="supertokens_python.recipe.session.interfaces.SessionContainer" href="../../../interfaces.html#supertokens_python.recipe.session.interfaces.SessionContainer">SessionContainer</a>, Dict[str, Any]], Union[Awaitable[List[<a title="supertokens_python.recipe.session.interfaces.SessionClaimValidator" href="../../../interfaces.html#supertokens_python.recipe.session.interfaces.SessionClaimValidator">SessionClaimValidator</a>]], List[<a title="supertokens_python.recipe.session.interfaces.SessionClaimValidator" href="../../../interfaces.html#supertokens_python.recipe.session.interfaces.SessionClaimValidator">SessionClaimValidator</a>]]]] = None, user_context: Optional[Dict[str, Any]] = None) ‑> Callable[[~_T], ~_T]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def verify_session(anti_csrf_check: Union[bool, None] = None, session_required: bool = True, user_context: Union[None, Dict[str, Any]] = None) -&gt; Callable[[_T], _T]:
-    if user_context is None:
-        user_context = {}
-
-    def session_verify(f: _T) -&gt; _T:
-        from django.http import HttpRequest
-
-        @wraps(f)
-        def wrapped_function(request: HttpRequest, *args: Any, **kwargs: Any):
-            from django.http import JsonResponse
-            try:
-                baseRequest = DjangoRequest(request)
-                recipe = SessionRecipe.get_instance()
-                session = sync(recipe.verify_session(baseRequest, anti_csrf_check, session_required, user_context))
-                if session is None:
-                    if session_required:
-                        raise Exception(&#34;Should never come here&#34;)
-                else:
-                    baseRequest.set_session(session)
-                return f(baseRequest.request, *args, **kwargs)
-            except SuperTokensError as e:
-                response = DjangoResponse(JsonResponse({}))
-                result = sync(Supertokens.get_instance().handle_supertokens_error(DjangoRequest(request), e, response))
-                if isinstance(result, DjangoResponse):
-                    return result.response
-                raise Exception(&#34;Should never come here&#34;)
-
-        return cast(_T, wrapped_function)
-
-    return session_verify</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -138,7 +139,7 @@ def verify_session(anti_csrf_check: Union[bool, None] = None, session_required: 
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -157,7 +158,7 @@ def verify_session(anti_csrf_check: Union[bool, None] = None, session_required: 
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

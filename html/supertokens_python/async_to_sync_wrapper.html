@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.async_to_sync_wrapper API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,23 +41,35 @@
 # under the License.
 
 import asyncio
+from os import getenv
 from typing import Any, Coroutine, TypeVar
 
 _T = TypeVar(&#34;_T&#34;)
 
 
-def check_event_loop():
+def nest_asyncio_enabled():
+    return getenv(&#34;SUPERTOKENS_NEST_ASYNCIO&#34;, &#34;&#34;) == &#34;1&#34;
+
+
+def create_or_get_event_loop() -&gt; asyncio.AbstractEventLoop:
     try:
-        asyncio.get_event_loop()
-    except RuntimeError as ex:
+        return asyncio.get_event_loop()
+    except Exception as ex:
         if &#34;There is no current event loop in thread&#34; in str(ex):
             loop = asyncio.new_event_loop()
+
+            if nest_asyncio_enabled():
+                import nest_asyncio  # type: ignore
+
+                nest_asyncio.apply(loop)  # type: ignore
+
             asyncio.set_event_loop(loop)
+            return loop
+        raise ex
 
 
 def sync(co: Coroutine[Any, Any, _T]) -&gt; _T:
-    check_event_loop()
-    loop = asyncio.get_event_loop()
+    loop = create_or_get_event_loop()
     return loop.run_until_complete(co)</code></pre>
 </details>
 </section>
@@ -68,38 +80,23 @@ def sync(co: Coroutine[Any, Any, _T]) -&gt; _T:
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="supertokens_python.async_to_sync_wrapper.check_event_loop"><code class="name flex">
-<span>def <span class="ident">check_event_loop</span></span>(<span>)</span>
+<dt id="supertokens_python.async_to_sync_wrapper.create_or_get_event_loop"><code class="name flex">
+<span>def <span class="ident">create_or_get_event_loop</span></span>(<span>) ‑> asyncio.events.AbstractEventLoop</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def check_event_loop():
-    try:
-        asyncio.get_event_loop()
-    except RuntimeError as ex:
-        if &#34;There is no current event loop in thread&#34; in str(ex):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)</code></pre>
-</details>
+</dd>
+<dt id="supertokens_python.async_to_sync_wrapper.nest_asyncio_enabled"><code class="name flex">
+<span>def <span class="ident">nest_asyncio_enabled</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
 </dd>
 <dt id="supertokens_python.async_to_sync_wrapper.sync"><code class="name flex">
 <span>def <span class="ident">sync</span></span>(<span>co: Coroutine[Any, Any, ~_T]) ‑> ~_T</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def sync(co: Coroutine[Any, Any, _T]) -&gt; _T:
-    check_event_loop()
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(co)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -107,7 +104,7 @@ def sync(co: Coroutine[Any, Any, _T]) -&gt; _T:
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -119,7 +116,8 @@ def sync(co: Coroutine[Any, Any, _T]) -&gt; _T:
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
-<li><code><a title="supertokens_python.async_to_sync_wrapper.check_event_loop" href="#supertokens_python.async_to_sync_wrapper.check_event_loop">check_event_loop</a></code></li>
+<li><code><a title="supertokens_python.async_to_sync_wrapper.create_or_get_event_loop" href="#supertokens_python.async_to_sync_wrapper.create_or_get_event_loop">create_or_get_event_loop</a></code></li>
+<li><code><a title="supertokens_python.async_to_sync_wrapper.nest_asyncio_enabled" href="#supertokens_python.async_to_sync_wrapper.nest_asyncio_enabled">nest_asyncio_enabled</a></code></li>
 <li><code><a title="supertokens_python.async_to_sync_wrapper.sync" href="#supertokens_python.async_to_sync_wrapper.sync">sync</a></code></li>
 </ul>
 </li>
@@ -127,7 +125,7 @@ def sync(co: Coroutine[Any, Any, _T]) -&gt; _T:
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

@@ -13,41 +13,98 @@
 # under the License.
 from __future__ import annotations
 
-from typing import Union
+from typing import TYPE_CHECKING, Any, Dict, List, NoReturn, Optional, Union
 
 from supertokens_python.exceptions import SuperTokensError
+from supertokens_python.types import RecipeUserId
+
+if TYPE_CHECKING:
+    from .interfaces import ResponseMutator
 
 
-def raise_token_theft_exception(user_id: str, session_handle: str):
-    raise TokenTheftError(user_id, session_handle)
+def raise_token_theft_exception(
+    user_id: str, recipe_user_id: RecipeUserId, session_handle: str
+) -> NoReturn:
+    raise TokenTheftError(user_id, recipe_user_id, session_handle)
 
 
-def raise_try_refresh_token_exception(ex: Union[str, Exception]):
+def raise_try_refresh_token_exception(ex: Union[str, Exception]) -> NoReturn:
     if isinstance(ex, SuperTokensError):
         raise ex
+
     raise TryRefreshTokenError(ex) from None
 
 
-def raise_unauthorised_exception(msg: str, clear_cookies: bool = True):
-    raise UnauthorisedError(msg, clear_cookies) from None
+def raise_unauthorised_exception(
+    msg: str,
+    clear_tokens: bool = True,
+    response_mutators: Optional[List[ResponseMutator]] = None,
+) -> NoReturn:
+    err = UnauthorisedError(msg, clear_tokens)
+
+    if response_mutators is not None:
+        err.response_mutators.extend(response_mutators)
+
+    raise err
+
+
+def raise_clear_duplicate_session_cookies_exception(
+    msg: str, response_mutators: List[ResponseMutator]
+) -> NoReturn:
+    err = ClearDuplicateSessionCookiesError(msg)
+    err.response_mutators.extend(response_mutators)
+    raise err
 
 
 class SuperTokensSessionError(SuperTokensError):
-    pass
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.response_mutators: List[ResponseMutator] = []
 
 
 class TokenTheftError(SuperTokensSessionError):
-    def __init__(self, user_id: str, session_handle: str):
-        super().__init__('token theft detected')
+    def __init__(self, user_id: str, recipe_user_id: RecipeUserId, session_handle: str):
+        super().__init__("token theft detected")
         self.user_id = user_id
+        self.recipe_user_id = recipe_user_id
         self.session_handle = session_handle
 
 
 class UnauthorisedError(SuperTokensSessionError):
-    def __init__(self, msg: str, clear_cookies: bool = True):
+    def __init__(self, msg: str, clear_tokens: bool = True):
         super().__init__(msg)
-        self.clear_cookies = clear_cookies
+        self.clear_tokens = clear_tokens
 
 
 class TryRefreshTokenError(SuperTokensSessionError):
+    pass
+
+
+class InvalidClaimsError(SuperTokensSessionError):
+    def __init__(self, msg: str, payload: List[ClaimValidationError]):
+        super().__init__(msg)
+        self.payload = payload
+
+
+class ClaimValidationError:
+    id_: str
+    reason: Optional[Union[str, Dict[str, Any]]]
+
+    def __init__(self, id_: str, reason: Optional[Union[str, Dict[str, Any]]]):
+        self.id_: str = id_
+        self.reason: Optional[Union[str, Dict[str, Any]]] = reason
+
+    def to_json(self):
+        result: Dict[str, Any] = {"id": self.id_}
+        if self.reason is not None:
+            result["reason"] = self.reason
+
+        return result
+
+
+def raise_invalid_claims_exception(msg: str, payload: List[ClaimValidationError]):
+    raise InvalidClaimsError(msg, payload)
+
+
+class ClearDuplicateSessionCookiesError(SuperTokensSessionError):
     pass

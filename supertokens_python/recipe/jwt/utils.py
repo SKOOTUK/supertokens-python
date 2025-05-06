@@ -20,8 +20,11 @@ if TYPE_CHECKING:
 
 
 class OverrideConfig:
-    def __init__(self, functions: Union[Callable[[RecipeInterface], RecipeInterface],
-                                        None] = None, apis: Union[Callable[[APIInterface], APIInterface], None] = None):
+    def __init__(
+        self,
+        functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
+        apis: Union[Callable[[APIInterface], APIInterface], None] = None,
+    ):
         self.functions = functions
         self.apis = apis
 
@@ -33,8 +36,15 @@ class JWTConfig:
 
 
 def validate_and_normalise_user_input(
-        jwt_validity_seconds: Union[int, None] = None,
-        override: Union[OverrideConfig, None] = None):
+    jwt_validity_seconds: Union[int, None] = None,
+    override: Union[OverrideConfig, None] = None,
+):
+    if jwt_validity_seconds is not None and not isinstance(jwt_validity_seconds, int):  # type: ignore
+        raise ValueError("jwt_validity_seconds must be an integer or None")
+
+    if override is not None and not isinstance(override, OverrideConfig):  # type: ignore
+        raise ValueError("override must be an instance of OverrideConfig or None")
+
     if override is None:
         override = OverrideConfig()
     if jwt_validity_seconds is None:

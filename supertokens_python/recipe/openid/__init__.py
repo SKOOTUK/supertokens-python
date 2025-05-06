@@ -24,7 +24,8 @@ if TYPE_CHECKING:
     from ...recipe_module import RecipeModule
 
 
-def init(jwt_validity_seconds: Union[int, None] = None,
-         issuer: Union[str, None] = None,
-         override: Union[InputOverrideConfig, None] = None) -> Callable[[AppInfo], RecipeModule]:
-    return OpenIdRecipe.init(jwt_validity_seconds, issuer, override)
+def init(
+    issuer: Union[str, None] = None,
+    override: Union[InputOverrideConfig, None] = None,
+) -> Callable[[AppInfo], RecipeModule]:
+    return OpenIdRecipe.init(issuer, override)

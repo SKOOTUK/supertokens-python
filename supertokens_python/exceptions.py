@@ -13,11 +13,12 @@
 # under the License.
 from __future__ import annotations
 
-from typing import Union
+from typing import NoReturn, Union
 
 
 def raise_general_exception(
-        msg: Union[str, Exception], previous: Union[None, Exception] = None):
+    msg: Union[str, Exception], previous: Union[None, Exception] = None
+) -> NoReturn:
     if isinstance(msg, SuperTokensError):
         raise msg
     if isinstance(msg, Exception):
@@ -25,7 +26,7 @@ def raise_general_exception(
     raise GeneralError(msg) from previous
 
 
-def raise_bad_input_exception(msg: str):
+def raise_bad_input_exception(msg: str) -> NoReturn:
     raise BadInputError(msg)
 
 

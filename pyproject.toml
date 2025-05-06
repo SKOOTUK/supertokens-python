@@ -1,6 +1,20 @@
-[tool.autopep8]
-max_line_length = 120
-ignore = "E501,W6"  # or ["E501", "W6"]
-in-place = true
-recursive = true
-aggressive = 3
+[tool.ruff]
+line-length = 88 # Match Black's formatting
+src = ["supertokens_python"]
+
+[tool.ruff.lint]
+extend-select = ["I"] # enable import sorting
+
+[tool.ruff.format]
+quote-style = "double" # Default
+indent-style = "space" # Default
+
+[tool.pyright]
+typeCheckingMode = "strict"
+reportImportCycles = false
+include = ["supertokens_python/", "tests/", "examples/"]
+
+[tool.pytest.ini_options]
+addopts = " -v -p no:warnings"
+python_paths = "."
+xfail_strict = true

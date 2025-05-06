@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.supertokens API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -42,147 +42,207 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, List, Set, Union
+from os import environ
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from typing_extensions import Literal
 
-from .constants import (FDI_KEY_HEADER, RID_KEY_HEADER, TELEMETRY,
-                        TELEMETRY_SUPERTOKENS_API_URL,
-                        TELEMETRY_SUPERTOKENS_API_VERSION, USER_COUNT,
-                        USER_DELETE, USERS)
+from supertokens_python.logger import (
+    enable_debug_logging,
+    get_maybe_none_as_str,
+    log_debug_message,
+)
+
+from .constants import FDI_KEY_HEADER, RID_KEY_HEADER, USER_COUNT
 from .exceptions import SuperTokensError
+from .interfaces import (
+    CreateUserIdMappingOkResult,
+    DeleteUserIdMappingOkResult,
+    GetUserIdMappingOkResult,
+    UnknownMappingError,
+    UnknownSupertokensUserIDError,
+    UpdateOrDeleteUserIdMappingInfoOkResult,
+    UserIdMappingAlreadyExistsError,
+    UserIDTypes,
+)
 from .normalised_url_domain import NormalisedURLDomain
 from .normalised_url_path import NormalisedURLPath
+from .post_init_callbacks import PostSTInitCallbacks
 from .querier import Querier
-from .recipe.session.cookie_and_header import (
-    attach_access_token_to_cookie, attach_anti_csrf_header,
-    attach_id_refresh_token_to_cookie_and_header,
-    attach_refresh_token_to_cookie, clear_cookies, set_front_token_in_headers)
-from .types import ThirdPartyInfo, User, UsersResponse
-from .utils import (compare_version, get_rid_from_request,
-                    normalise_http_method, send_non_200_response)
+from .utils import (
+    get_rid_from_header,
+    get_top_level_domain_for_same_site_resolution,
+    is_version_gte,
+    normalise_http_method,
+    send_non_200_response_with_message,
+)
 
 if TYPE_CHECKING:
-    from .recipe_module import RecipeModule
     from supertokens_python.framework.request import BaseRequest
     from supertokens_python.framework.response import BaseResponse
     from supertokens_python.recipe.session import SessionContainer
 
-import asyncio
-from os import environ
+    from .recipe_module import RecipeModule
 
-from httpx import AsyncClient
+import json
 
 from .exceptions import BadInputError, GeneralError, raise_general_exception
-from .recipe.session import SessionRecipe
 
 
 class SupertokensConfig:
-    def __init__(self, connection_uri: str, api_key: Union[str, None] = None):  # We keep this = None here because this is directly used by the user.
+    def __init__(
+        self,
+        connection_uri: str,
+        api_key: Union[str, None] = None,
+        network_interceptor: Optional[
+            Callable[
+                [
+                    str,
+                    str,
+                    Dict[str, Any],
+                    Optional[Dict[str, Any]],
+                    Optional[Dict[str, Any]],
+                    Optional[Dict[str, Any]],
+                ],
+                Tuple[
+                    str,
+                    str,
+                    Dict[str, Any],
+                    Optional[Dict[str, Any]],
+                    Optional[Dict[str, Any]],
+                ],
+            ]
+        ] = None,
+        disable_core_call_cache: bool = False,
+    ):  # We keep this = None here because this is directly used by the user.
         self.connection_uri = connection_uri
         self.api_key = api_key
+        self.network_interceptor = network_interceptor
+        self.disable_core_call_cache = disable_core_call_cache
 
 
 class Host:
-    def __init__(self, domain: NormalisedURLDomain,
-                 base_path: NormalisedURLPath):
+    def __init__(self, domain: NormalisedURLDomain, base_path: NormalisedURLPath):
         self.domain = domain
         self.base_path = base_path
 
 
 class InputAppInfo:
-    def __init__(self,
-                 app_name: str,
-                 api_domain: str,
-                 website_domain: str,
-                 api_gateway_path: str = &#39;&#39;,
-                 api_base_path: str = &#39;/auth&#39;,
-                 website_base_path: str = &#39;/auth&#39;,
-                 ):
+    def __init__(
+        self,
+        app_name: str,
+        api_domain: str,
+        api_gateway_path: str = &#34;&#34;,
+        api_base_path: str = &#34;/auth&#34;,
+        website_base_path: str = &#34;/auth&#34;,
+        website_domain: Optional[str] = None,
+        origin: Optional[
+            Union[str, Callable[[Optional[BaseRequest], Dict[str, Any]], str]]
+        ] = None,
+    ):
         self.app_name = app_name
         self.api_gateway_path = api_gateway_path
         self.api_domain = api_domain
         self.website_domain = website_domain
+        self.origin = origin
         self.api_base_path = api_base_path
         self.website_base_path = website_base_path
 
 
 class AppInfo:
-    def __init__(self, app_name: str, api_domain: str, website_domain: str,
-                 framework: Literal[&#39;fastapi&#39;, &#39;flask&#39;, &#39;django&#39;], api_gateway_path: str,
-                 api_base_path: str, website_base_path: str,
-                 mode: Union[Literal[&#39;asgi&#39;, &#39;wsgi&#39;], None]):
+    def __init__(
+        self,
+        app_name: str,
+        api_domain: str,
+        website_domain: Optional[str],
+        framework: Literal[&#34;fastapi&#34;, &#34;flask&#34;, &#34;django&#34;],
+        api_gateway_path: str,
+        api_base_path: str,
+        website_base_path: str,
+        mode: Union[Literal[&#34;asgi&#34;, &#34;wsgi&#34;], None],
+        origin: Optional[
+            Union[str, Callable[[Optional[BaseRequest], Dict[str, Any]], str]]
+        ],
+    ):
         self.app_name = app_name
-        self.api_gateway_path: NormalisedURLPath = NormalisedURLPath(
-            api_gateway_path)
-        self.api_domain: NormalisedURLDomain = NormalisedURLDomain(api_domain)
-        self.website_domain: NormalisedURLDomain = NormalisedURLDomain(
-            website_domain)
-        self.api_base_path: NormalisedURLPath = self.api_gateway_path.append(
-            NormalisedURLPath(api_base_path))
-        self.website_base_path: NormalisedURLPath = NormalisedURLPath(
-            website_base_path)
+        self.api_gateway_path = NormalisedURLPath(api_gateway_path)
+        self.api_domain = NormalisedURLDomain(api_domain)
+        self.top_level_api_domain = get_top_level_domain_for_same_site_resolution(
+            self.api_domain.get_as_string_dangerous()
+        )
+        if website_domain is None and origin is None:
+            raise_general_exception(
+                &#34;Please provide at least one of website_domain or origin&#34;
+            )
+        self.__origin = origin
+        self.__website_domain = website_domain
+        self.api_base_path = self.api_gateway_path.append(
+            NormalisedURLPath(api_base_path)
+        )
+        self.website_base_path = NormalisedURLPath(website_base_path)
         if mode is not None:
             self.mode = mode
-        elif framework == &#39;fastapi&#39;:
-            mode = &#39;asgi&#39;
+        elif framework == &#34;fastapi&#34;:
+            mode = &#34;asgi&#34;
         else:
-            mode = &#39;wsgi&#39;
+            mode = &#34;wsgi&#34;
         self.framework = framework
         self.mode = mode
 
+    def get_top_level_website_domain(
+        self, request: Optional[BaseRequest], user_context: Dict[str, Any]
+    ) -&gt; str:
+        return get_top_level_domain_for_same_site_resolution(
+            self.get_origin(request, user_context).get_as_string_dangerous()
+        )
 
-def manage_cookies_post_response(session: SessionContainer, response: BaseResponse):
-    recipe = SessionRecipe.get_instance()
-    if session[&#39;remove_cookies&#39;]:
-        clear_cookies(recipe, response)
-    else:
-        access_token = session[&#39;new_access_token_info&#39;]
-        if access_token is not None:
-            attach_access_token_to_cookie(
-                recipe,
-                response,
-                access_token[&#39;token&#39;],
-                access_token[&#39;expiry&#39;]
-            )
-            set_front_token_in_headers(
-                response,
-                session[&#39;user_id&#39;],
-                access_token[&#39;expiry&#39;],
-                session[&#39;access_token_payload&#39;]
-            )
-        refresh_token = session[&#39;new_refresh_token_info&#39;]
-        if refresh_token is not None:
-            attach_refresh_token_to_cookie(
-                recipe,
-                response,
-                refresh_token[&#39;token&#39;],
-                refresh_token[&#39;expiry&#39;]
-            )
-        id_refresh_token = session[&#39;new_id_refresh_token_info&#39;]
-        if id_refresh_token is not None:
-            attach_id_refresh_token_to_cookie_and_header(
-                recipe,
-                response,
-                id_refresh_token[&#39;token&#39;],
-                id_refresh_token[&#39;expiry&#39;]
-            )
-        anti_csrf_token = session[&#39;new_anti_csrf_token&#39;]
-        if anti_csrf_token is not None:
-            attach_anti_csrf_header(response, anti_csrf_token)
+    def get_origin(self, request: Optional[BaseRequest], user_context: Dict[str, Any]):
+        origin = self.__origin
+        if origin is None:
+            origin = self.__website_domain
+
+        # This should not be possible because we check for either origin or websiteDomain above
+        if origin is None:
+            raise_general_exception(&#34;should never come here&#34;)
+
+        if callable(origin):
+            origin = origin(request, user_context)
+
+        return NormalisedURLDomain(origin)
+
+    def toJSON(self):
+        def defaultImpl(o: Any):
+            if isinstance(o, (NormalisedURLDomain, NormalisedURLPath)):
+                return o.get_as_string_dangerous()
+            return o.__dict__
+
+        return json.dumps(self, default=defaultImpl, sort_keys=True, indent=4)
+
+
+def manage_session_post_response(
+    session: SessionContainer, response: BaseResponse, user_context: Dict[str, Any]
+):
+    # Something similar happens in handle_error of session/recipe.py
+    for mutator in session.response_mutators:
+        mutator(response, user_context)
 
 
 class Supertokens:
     __instance = None
 
-    def __init__(self,
-                 app_info: InputAppInfo,
-                 framework: Literal[&#39;fastapi&#39;, &#39;flask&#39;, &#39;django&#39;],
-                 supertokens_config: SupertokensConfig,
-                 recipe_list: List[Callable[[AppInfo], RecipeModule]],
-                 mode: Union[Literal[&#39;asgi&#39;, &#39;wsgi&#39;], None],
-                 telemetry: Union[bool, None]
-                 ):
+    def __init__(
+        self,
+        app_info: InputAppInfo,
+        framework: Literal[&#34;fastapi&#34;, &#34;flask&#34;, &#34;django&#34;],
+        supertokens_config: SupertokensConfig,
+        recipe_list: List[Callable[[AppInfo], RecipeModule]],
+        mode: Optional[Literal[&#34;asgi&#34;, &#34;wsgi&#34;]],
+        telemetry: Optional[bool],
+        debug: Optional[bool],
+    ):
+        if not isinstance(app_info, InputAppInfo):  # type: ignore
+            raise ValueError(&#34;app_info must be an instance of InputAppInfo&#34;)
+
         self.app_info = AppInfo(
             app_info.app_name,
             app_info.api_domain,
@@ -191,71 +251,141 @@ class Supertokens:
             app_info.api_gateway_path,
             app_info.api_base_path,
             app_info.website_base_path,
-            mode
+            mode,
+            app_info.origin,
         )
-        hosts = list(map(lambda h: Host(NormalisedURLDomain(h.strip()), NormalisedURLPath(h.strip())),
-                         filter(lambda x: x != &#39;&#39;, supertokens_config.connection_uri.split(&#39;;&#39;))))
-        Querier.init(hosts, supertokens_config.api_key)
+        self.supertokens_config = supertokens_config
+        if debug is True:
+            enable_debug_logging()
+        self._telemetry_status: str = &#34;NONE&#34;
+        log_debug_message(
+            &#34;Started SuperTokens with debug logging (supertokens.init called)&#34;
+        )
+        log_debug_message(&#34;app_info: %s&#34;, self.app_info.toJSON())
+        log_debug_message(&#34;framework: %s&#34;, framework)
+        hosts = list(
+            map(
+                lambda h: Host(
+                    NormalisedURLDomain(h.strip()), NormalisedURLPath(h.strip())
+                ),
+                filter(lambda x: x != &#34;&#34;, supertokens_config.connection_uri.split(&#34;;&#34;)),
+            )
+        )
+        Querier.init(
+            hosts,
+            supertokens_config.api_key,
+            supertokens_config.network_interceptor,
+            supertokens_config.disable_core_call_cache,
+        )
 
         if len(recipe_list) == 0:
             raise_general_exception(
-                &#39;Please provide at least one recipe to the supertokens.init function call&#39;)
+                &#34;Please provide at least one recipe to the supertokens.init function call&#34;
+            )
 
-        self.recipe_modules: List[RecipeModule] = list(
-            map(lambda func: func(self.app_info), recipe_list))
+        multitenancy_found = False
+        totp_found = False
+        user_metadata_found = False
+        multi_factor_auth_found = False
+        oauth2_found = False
+        openid_found = False
+        jwt_found = False
 
-        if telemetry is None:
-            telemetry = (&#39;SUPERTOKENS_ENV&#39; not in environ) or (
-                environ[&#39;SUPERTOKENS_ENV&#39;] != &#39;testing&#39;)
+        def make_recipe(recipe: Callable[[AppInfo], RecipeModule]) -&gt; RecipeModule:
+            nonlocal \
+                multitenancy_found, \
+                totp_found, \
+                user_metadata_found, \
+                multi_factor_auth_found, \
+                oauth2_found, \
+                openid_found, \
+                jwt_found
+            recipe_module = recipe(self.app_info)
+            if recipe_module.get_recipe_id() == &#34;multitenancy&#34;:
+                multitenancy_found = True
+            elif recipe_module.get_recipe_id() == &#34;usermetadata&#34;:
+                user_metadata_found = True
+            elif recipe_module.get_recipe_id() == &#34;multifactorauth&#34;:
+                multi_factor_auth_found = True
+            elif recipe_module.get_recipe_id() == &#34;totp&#34;:
+                totp_found = True
+            elif recipe_module.get_recipe_id() == &#34;oauth2provider&#34;:
+                oauth2_found = True
+            elif recipe_module.get_recipe_id() == &#34;openid&#34;:
+                openid_found = True
+            elif recipe_module.get_recipe_id() == &#34;jwt&#34;:
+                jwt_found = True
+            return recipe_module
 
-        if telemetry:
-            if self.app_info.framework.lower(
-            ) == &#39;flask&#39; or self.app_info.framework.lower() == &#39;django&#39;:
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(self.send_telemetry())
-            else:
-                asyncio.create_task(self.send_telemetry())
+        self.recipe_modules: List[RecipeModule] = list(map(make_recipe, recipe_list))
 
-    async def send_telemetry(self):
-        try:
-            querier = Querier.get_instance(None)
-            response = await querier.send_get_request(NormalisedURLPath(TELEMETRY), {})
-            telemetry_id = None
-            if &#39;exists&#39; in response and response[&#39;exists&#39;] and &#39;telemetry_id&#39; in response:
-                telemetry_id = response[&#39;telemetry_id&#39;]
-            data = {
-                &#39;appName&#39;: self.app_info.app_name,
-                &#39;websiteDomain&#39;: self.app_info.website_domain.get_as_string_dangerous(),
-                &#39;sdk&#39;: &#39;python&#39;
-            }
-            if telemetry_id is not None:
-                data = {
-                    **data,
-                    &#39;telemetryId&#39;: telemetry_id
-                }
-            async with AsyncClient() as client:
-                await client.post(url=TELEMETRY_SUPERTOKENS_API_URL, json=data,  # type: ignore
-                                  headers={&#39;api-version&#39;: TELEMETRY_SUPERTOKENS_API_VERSION})
-        except Exception:
-            pass
+        if not jwt_found:
+            from supertokens_python.recipe.jwt.recipe import JWTRecipe
+
+            self.recipe_modules.append(JWTRecipe.init()(self.app_info))
+
+        if not openid_found:
+            from supertokens_python.recipe.openid.recipe import OpenIdRecipe
+
+            self.recipe_modules.append(OpenIdRecipe.init()(self.app_info))
+
+        if not multitenancy_found:
+            from supertokens_python.recipe.multitenancy.recipe import MultitenancyRecipe
+
+            self.recipe_modules.append(MultitenancyRecipe.init()(self.app_info))
+
+        if totp_found and not multi_factor_auth_found:
+            raise Exception(&#34;Please initialize the MultiFactorAuth recipe to use TOTP.&#34;)
+
+        if not user_metadata_found:
+            from supertokens_python.recipe.usermetadata.recipe import UserMetadataRecipe
+
+            self.recipe_modules.append(UserMetadataRecipe.init()(self.app_info))
+
+        if not oauth2_found:
+            from supertokens_python.recipe.oauth2provider.recipe import (
+                OAuth2ProviderRecipe,
+            )
+
+            self.recipe_modules.append(OAuth2ProviderRecipe.init()(self.app_info))
+
+        self.telemetry = (
+            telemetry
+            if telemetry is not None
+            else (environ.get(&#34;TEST_MODE&#34;) != &#34;testing&#34;)
+        )
 
     @staticmethod
-    def init(app_info: InputAppInfo,
-             framework: Literal[&#39;fastapi&#39;, &#39;flask&#39;, &#39;django&#39;],
-             supertokens_config: SupertokensConfig,
-             recipe_list: List[Callable[[AppInfo], RecipeModule]],
-             mode: Union[Literal[&#39;asgi&#39;, &#39;wsgi&#39;], None],
-             telemetry: Union[bool, None]):
+    def init(
+        app_info: InputAppInfo,
+        framework: Literal[&#34;fastapi&#34;, &#34;flask&#34;, &#34;django&#34;],
+        supertokens_config: SupertokensConfig,
+        recipe_list: List[Callable[[AppInfo], RecipeModule]],
+        mode: Optional[Literal[&#34;asgi&#34;, &#34;wsgi&#34;]],
+        telemetry: Optional[bool],
+        debug: Optional[bool],
+    ):
         if Supertokens.__instance is None:
             Supertokens.__instance = Supertokens(
-                app_info, framework, supertokens_config, recipe_list, mode, telemetry)
+                app_info,
+                framework,
+                supertokens_config,
+                recipe_list,
+                mode,
+                telemetry,
+                debug,
+            )
+            PostSTInitCallbacks.run_post_init_callbacks()
 
     @staticmethod
     def reset():
-        if (&#39;SUPERTOKENS_ENV&#39; not in environ) or (
-                environ[&#39;SUPERTOKENS_ENV&#39;] != &#39;testing&#39;):
-            raise_general_exception(
-                &#39;calling testing function in non testing env&#39;)
+        if (&#34;SUPERTOKENS_ENV&#34; not in environ) or (
+            environ[&#34;SUPERTOKENS_ENV&#34;] != &#34;testing&#34;
+        ):
+            raise_general_exception(&#34;calling testing function in non testing env&#34;)
+        from supertokens_python.recipe.usermetadata.recipe import UserMetadataRecipe
+
+        UserMetadataRecipe.reset()
         Querier.reset()
         Supertokens.__instance = None
 
@@ -264,7 +394,8 @@ class Supertokens:
         if Supertokens.__instance is not None:
             return Supertokens.__instance
         raise_general_exception(
-            &#39;Initialisation not done. Did you forget to call the SuperTokens.init function?&#39;)
+            &#34;Initialisation not done. Did you forget to call the SuperTokens.init function?&#34;
+        )
 
     def get_all_cors_headers(self) -&gt; List[str]:
         headers_set: Set[str] = set()
@@ -277,132 +408,340 @@ class Supertokens:
 
         return list(headers_set)
 
-    async def get_user_count(self, include_recipe_ids: Union[None, List[str]]) -&gt; int:  # pylint: disable=no-self-use
+    async def get_user_count(
+        self,
+        include_recipe_ids: Union[None, List[str]],
+        tenant_id: Optional[str] = None,
+        user_context: Optional[Dict[str, Any]] = None,
+    ) -&gt; int:
         querier = Querier.get_instance(None)
         include_recipe_ids_str = None
         if include_recipe_ids is not None:
-            include_recipe_ids_str = &#39;,&#39;.join(include_recipe_ids)
+            include_recipe_ids_str = &#34;,&#34;.join(include_recipe_ids)
 
-        response = await querier.send_get_request(NormalisedURLPath(USER_COUNT), {
-            &#34;includeRecipeIds&#34;: include_recipe_ids_str
-        })
+        response = await querier.send_get_request(
+            NormalisedURLPath(f&#34;/{tenant_id or &#39;public&#39;}{USER_COUNT}&#34;),
+            {
+                &#34;includeRecipeIds&#34;: include_recipe_ids_str,
+                &#34;includeAllTenants&#34;: tenant_id is None,
+            },
+            user_context=user_context,
+        )
 
-        return int(response[&#39;count&#39;])
+        return int(response[&#34;count&#34;])
 
-    async def delete_user(self, user_id: str) -&gt; None:  # pylint: disable=no-self-use
+    async def create_user_id_mapping(
+        self,
+        supertokens_user_id: str,
+        external_user_id: str,
+        external_user_id_info: Optional[str],
+        force: Optional[bool],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; Union[
+        CreateUserIdMappingOkResult,
+        UnknownSupertokensUserIDError,
+        UserIdMappingAlreadyExistsError,
+    ]:
         querier = Querier.get_instance(None)
 
-        cdi_version = await querier.get_api_version()
+        cdi_version = await querier.get_api_version(user_context)
 
-        if compare_version(cdi_version, &#34;2.10&#34;) == cdi_version:
-            await querier.send_post_request(NormalisedURLPath(USER_DELETE), {
-                &#34;userId&#34;: user_id
-            })
-
-            return None
-        raise_general_exception(
-            &#39;Please upgrade the SuperTokens core to &gt;= 3.7.0&#39;)
-
-    async def get_users(self, time_joined_order: Literal[&#39;ASC&#39;, &#39;DESC&#39;],  # pylint: disable=no-self-use
-                        limit: Union[int, None], pagination_token: Union[str, None],
-                        include_recipe_ids: Union[None, List[str]]) -&gt; UsersResponse:
-        querier = Querier.get_instance(None)
-        params = {
-            &#39;timeJoinedOrder&#39;: time_joined_order
-        }
-        if limit is not None:
-            params = {
-                &#39;limit&#39;: limit,
-                **params
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            body: Dict[str, Any] = {
+                &#34;superTokensUserId&#34;: supertokens_user_id,
+                &#34;externalUserId&#34;: external_user_id,
+                &#34;externalUserIdInfo&#34;: external_user_id_info,
             }
-        if pagination_token is not None:
-            params = {
-                &#39;paginationToken&#39;: pagination_token,
-                **params
-            }
+            if force:
+                body[&#34;force&#34;] = force
 
-        include_recipe_ids_str = None
-        if include_recipe_ids is not None:
-            include_recipe_ids_str = &#39;,&#39;.join(include_recipe_ids)
-
-        params = {
-            &#39;paginationToken&#39;: include_recipe_ids_str,
-            **params
-        }
-
-        response = await querier.send_get_request(NormalisedURLPath(USERS), params)
-        next_pagination_token = None
-        if &#39;nextPaginationToken&#39; in response:
-            next_pagination_token = response[&#39;nextPaginationToken&#39;]
-        users_list = response[&#39;users&#39;]
-        users: List[User] = []
-        for user in users_list:
-            recipe_id = user[&#39;recipeId&#39;]
-            user_obj = user[&#39;user&#39;]
-            third_party = None
-            if &#39;thirdParty&#39; in user_obj:
-                third_party = ThirdPartyInfo(
-                    user_obj[&#39;thirdParty&#39;][&#39;userId&#39;],
-                    user_obj[&#39;thirdParty&#39;][&#39;id&#39;]
+            res = await querier.send_post_request(
+                NormalisedURLPath(&#34;/recipe/userid/map&#34;), body, user_context=user_context
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return CreateUserIdMappingOkResult()
+            if res[&#34;status&#34;] == &#34;UNKNOWN_SUPERTOKENS_USER_ID_ERROR&#34;:
+                return UnknownSupertokensUserIDError()
+            if res[&#34;status&#34;] == &#34;USER_ID_MAPPING_ALREADY_EXISTS_ERROR&#34;:
+                return UserIdMappingAlreadyExistsError(
+                    does_super_tokens_user_id_exist=res[&#34;doesSuperTokensUserIdExist&#34;],
+                    does_external_user_id_exist=res[&#34;does_external_user_id_exist&#34;],
                 )
-            email = None
-            if &#39;email&#39; in user_obj:
-                email = user_obj[&#39;email&#39;]
-            phone_number = None
-            if &#39;phoneNumber&#39; in user_obj:
-                phone_number = user_obj[&#39;phoneNumber&#39;]
-            users.append(User(
-                recipe_id, user_obj[&#39;id&#39;], user_obj[&#39;timeJoined&#39;], email, phone_number, third_party))
 
-        return UsersResponse(users, next_pagination_token)
+            raise_general_exception(&#34;Unknown response&#34;)
 
-    async def middleware(self, request: BaseRequest, response: BaseResponse) -&gt; Union[BaseResponse, None]:  # pylint: disable=no-self-use
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def get_user_id_mapping(
+        self,
+        user_id: str,
+        user_id_type: Optional[UserIDTypes],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; Union[GetUserIdMappingOkResult, UnknownMappingError]:
+        querier = Querier.get_instance(None)
+
+        cdi_version = await querier.get_api_version(user_context)
+
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            body = {
+                &#34;userId&#34;: user_id,
+            }
+            if user_id_type:
+                body[&#34;userIdType&#34;] = user_id_type
+            res = await querier.send_get_request(
+                NormalisedURLPath(&#34;/recipe/userid/map&#34;),
+                body,
+                user_context=user_context,
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return GetUserIdMappingOkResult(
+                    supertokens_user_id=res[&#34;superTokensUserId&#34;],
+                    external_user_id=res[&#34;externalUserId&#34;],
+                    external_user_info=res.get(&#34;externalUserIdInfo&#34;),
+                )
+            if res[&#34;status&#34;] == &#34;UNKNOWN_MAPPING_ERROR&#34;:
+                return UnknownMappingError()
+
+            raise_general_exception(&#34;Unknown response&#34;)
+
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def delete_user_id_mapping(
+        self,
+        user_id: str,
+        user_id_type: Optional[UserIDTypes],
+        force: Optional[bool],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; DeleteUserIdMappingOkResult:
+        querier = Querier.get_instance(None)
+
+        cdi_version = await querier.get_api_version(user_context)
+
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            body: Dict[str, Any] = {
+                &#34;userId&#34;: user_id,
+                &#34;userIdType&#34;: user_id_type,
+            }
+            if force:
+                body[&#34;force&#34;] = force
+            res = await querier.send_post_request(
+                NormalisedURLPath(&#34;/recipe/userid/map/remove&#34;),
+                body,
+                user_context=user_context,
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return DeleteUserIdMappingOkResult(
+                    did_mapping_exist=res[&#34;didMappingExist&#34;]
+                )
+
+            raise_general_exception(&#34;Unknown response&#34;)
+
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def update_or_delete_user_id_mapping_info(
+        self,
+        user_id: str,
+        user_id_type: Optional[UserIDTypes],
+        external_user_id_info: Optional[str],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; Union[UpdateOrDeleteUserIdMappingInfoOkResult, UnknownMappingError]:
+        querier = Querier.get_instance(None)
+
+        cdi_version = await querier.get_api_version(user_context)
+
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            res = await querier.send_post_request(
+                NormalisedURLPath(&#34;/recipe/userid/external-user-id-info&#34;),
+                {
+                    &#34;userId&#34;: user_id,
+                    &#34;userIdType&#34;: user_id_type,
+                    &#34;externalUserIdInfo&#34;: external_user_id_info,
+                },
+                user_context=user_context,
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return UpdateOrDeleteUserIdMappingInfoOkResult()
+            if res[&#34;status&#34;] == &#34;UNKNOWN_MAPPING_ERROR&#34;:
+                return UnknownMappingError()
+
+            raise_general_exception(&#34;Unknown response&#34;)
+
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def middleware(
+        self, request: BaseRequest, response: BaseResponse, user_context: Dict[str, Any]
+    ) -&gt; Union[BaseResponse, None]:
+        log_debug_message(&#34;middleware: Started&#34;)
         path = Supertokens.get_instance().app_info.api_gateway_path.append(
-            NormalisedURLPath(
-                request.get_path()))
+            NormalisedURLPath(request.get_path())
+        )
         method = normalise_http_method(request.method())
 
-        if not path.startswith(
-                Supertokens.get_instance().app_info.api_base_path):
+        if not path.startswith(Supertokens.get_instance().app_info.api_base_path):
+            log_debug_message(
+                &#34;middleware: Not handling because request path did not start with api base path. Request path: %s&#34;,
+                path.get_as_string_dangerous(),
+            )
             return None
-        request_rid = get_rid_from_request(request)
-        if request_rid is not None and request_rid == &#39;anti-csrf&#39;:
-            # see
-            # https://github.com/supertokens/supertokens-python/issues/54
+        request_rid = get_rid_from_header(request)
+        log_debug_message(
+            &#34;middleware: requestRID is: %s&#34;, get_maybe_none_as_str(request_rid)
+        )
+        if request_rid is not None and request_rid == &#34;anti-csrf&#34;:
+            # see https://github.com/supertokens/supertokens-python/issues/54
             request_rid = None
-        request_id = None
-        matched_recipe = None
-        if request_rid is not None:
-            for recipe in Supertokens.get_instance().recipe_modules:
-                if recipe.get_recipe_id() == request_rid:
-                    matched_recipe = recipe
-                    break
-            if matched_recipe is not None:
-                request_id = matched_recipe.return_api_id_if_can_handle_request(
-                    path, method)
-        else:
-            for recipe in Supertokens.get_instance().recipe_modules:
-                request_id = recipe.return_api_id_if_can_handle_request(
-                    path, method)
-                if request_id is not None:
-                    matched_recipe = recipe
-                    break
-        if request_id is not None and matched_recipe is not None:
-            return await matched_recipe.handle_api_request(request_id, request, path, method, response)
-        return None
 
-    async def handle_supertokens_error(self, request: BaseRequest, err: Exception, response: BaseResponse):
+        async def handle_without_rid():
+            for recipe in self.recipe_modules:
+                log_debug_message(
+                    &#34;middleware: Checking recipe ID for match: %s with path: %s and method: %s&#34;,
+                    recipe.get_recipe_id(),
+                    path.get_as_string_dangerous(),
+                    method,
+                )
+                api_and_tenant_id = await recipe.return_api_id_if_can_handle_request(
+                    path, method, user_context
+                )
+                if api_and_tenant_id is not None:
+                    log_debug_message(
+                        &#34;middleware: Request being handled by recipe. ID is: %s&#34;,
+                        api_and_tenant_id.api_id,
+                    )
+                    api_resp = await recipe.handle_api_request(
+                        api_and_tenant_id.api_id,
+                        api_and_tenant_id.tenant_id,
+                        request,
+                        path,
+                        method,
+                        response,
+                        user_context,
+                    )
+                    if api_resp is None:
+                        log_debug_message(
+                            &#34;middleware: Not handled because API returned None&#34;
+                        )
+                        return None
+                    log_debug_message(&#34;middleware: Ended&#34;)
+                    return api_resp
+            log_debug_message(&#34;middleware: Not handling because no recipe matched&#34;)
+            return None
+
+        if request_rid is not None:
+            matched_recipes = [
+                recipe
+                for recipe in self.recipe_modules
+                if recipe.get_recipe_id() == request_rid
+                or (
+                    request_rid == &#34;thirdpartyemailpassword&#34;
+                    and recipe.get_recipe_id() in [&#34;thirdparty&#34;, &#34;emailpassword&#34;]
+                )
+                or (
+                    request_rid == &#34;thirdpartypasswordless&#34;
+                    and recipe.get_recipe_id() in [&#34;thirdparty&#34;, &#34;passwordless&#34;]
+                )
+            ]
+
+            if len(matched_recipes) == 0:
+                log_debug_message(
+                    &#34;middleware: Not handling based on rid match. Trying without rid.&#34;
+                )
+                return await handle_without_rid()
+
+            for recipe in matched_recipes:
+                log_debug_message(
+                    &#34;middleware: Matched with recipe Ids: %s&#34;, recipe.get_recipe_id()
+                )
+
+            id_result = None
+            final_matched_recipe = None
+            for recipe in matched_recipes:
+                current_id_result = await recipe.return_api_id_if_can_handle_request(
+                    path, method, user_context
+                )
+                if current_id_result is not None:
+                    if id_result is not None:
+                        raise ValueError(
+                            &#34;Two recipes have matched the same API path and method! This is a bug in the SDK. Please contact support.&#34;
+                        )
+                    final_matched_recipe = recipe
+                    id_result = current_id_result
+
+            if id_result is None or final_matched_recipe is None:
+                return await handle_without_rid()
+
+            log_debug_message(
+                &#34;middleware: Request being handled by recipe. ID is: %s&#34;,
+                id_result.api_id,
+            )
+            request_handled = await final_matched_recipe.handle_api_request(
+                id_result.api_id,
+                id_result.tenant_id,
+                request,
+                path,
+                method,
+                response,
+                user_context,
+            )
+            if request_handled is None:
+                log_debug_message(
+                    &#34;middleware: Not handled because API returned request_handled as None&#34;
+                )
+                return None
+            log_debug_message(&#34;middleware: Ended&#34;)
+            return request_handled
+        return await handle_without_rid()
+
+    async def handle_supertokens_error(
+        self,
+        request: BaseRequest,
+        err: Exception,
+        response: BaseResponse,
+        user_context: Dict[str, Any],
+    ) -&gt; Optional[BaseResponse]:
+        log_debug_message(&#34;errorHandler: Started&#34;)
+        log_debug_message(
+            &#34;errorHandler: Error is from SuperTokens recipe. Message: %s&#34;, str(err)
+        )
         if isinstance(err, GeneralError):
             raise err
 
         if isinstance(err, BadInputError):
-            return send_non_200_response(str(err), 400, response)
+            log_debug_message(&#34;errorHandler: Sending 400 status code response&#34;)
+            return send_non_200_response_with_message(str(err), 400, response)
 
         for recipe in self.recipe_modules:
-            if recipe.is_error_from_this_recipe_based_on_instance(
-                    err) and isinstance(err, SuperTokensError):
-                return await recipe.handle_error(request, err, response)
-        raise err</code></pre>
+            log_debug_message(
+                &#34;errorHandler: Checking recipe for match: %s&#34;, recipe.get_recipe_id()
+            )
+            if recipe.is_error_from_this_recipe_based_on_instance(err) and isinstance(
+                err, SuperTokensError
+            ):
+                log_debug_message(
+                    &#34;errorHandler: Matched with recipeID: %s&#34;, recipe.get_recipe_id()
+                )
+                return await recipe.handle_error(request, err, response, user_context)
+        raise err
+
+    def get_request_from_user_context(
+        self,
+        user_context: Optional[Dict[str, Any]] = None,
+    ) -&gt; Optional[BaseRequest]:
+        if user_context is None:
+            return None
+
+        if &#34;_default&#34; not in user_context:
+            return None
+
+        if not isinstance(user_context[&#34;_default&#34;], dict):
+            return None
+
+        return user_context.get(&#34;_default&#34;, {}).get(&#34;request&#34;)
+
+
+def get_request_from_user_context(
+    user_context: Optional[Dict[str, Any]],
+) -&gt; Optional[BaseRequest]:
+    return Supertokens.get_instance().get_request_from_user_context(user_context)</code></pre>
 </details>
 </section>
 <section>
@@ -412,54 +751,17 @@ class Supertokens:
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="supertokens_python.supertokens.manage_cookies_post_response"><code class="name flex">
-<span>def <span class="ident">manage_cookies_post_response</span></span>(<span>session: SessionContainer, response: BaseResponse)</span>
+<dt id="supertokens_python.supertokens.get_request_from_user_context"><code class="name flex">
+<span>def <span class="ident">get_request_from_user_context</span></span>(<span>user_context: Optional[Dict[str, Any]])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def manage_cookies_post_response(session: SessionContainer, response: BaseResponse):
-    recipe = SessionRecipe.get_instance()
-    if session[&#39;remove_cookies&#39;]:
-        clear_cookies(recipe, response)
-    else:
-        access_token = session[&#39;new_access_token_info&#39;]
-        if access_token is not None:
-            attach_access_token_to_cookie(
-                recipe,
-                response,
-                access_token[&#39;token&#39;],
-                access_token[&#39;expiry&#39;]
-            )
-            set_front_token_in_headers(
-                response,
-                session[&#39;user_id&#39;],
-                access_token[&#39;expiry&#39;],
-                session[&#39;access_token_payload&#39;]
-            )
-        refresh_token = session[&#39;new_refresh_token_info&#39;]
-        if refresh_token is not None:
-            attach_refresh_token_to_cookie(
-                recipe,
-                response,
-                refresh_token[&#39;token&#39;],
-                refresh_token[&#39;expiry&#39;]
-            )
-        id_refresh_token = session[&#39;new_id_refresh_token_info&#39;]
-        if id_refresh_token is not None:
-            attach_id_refresh_token_to_cookie_and_header(
-                recipe,
-                response,
-                id_refresh_token[&#39;token&#39;],
-                id_refresh_token[&#39;expiry&#39;]
-            )
-        anti_csrf_token = session[&#39;new_anti_csrf_token&#39;]
-        if anti_csrf_token is not None:
-            attach_anti_csrf_header(response, anti_csrf_token)</code></pre>
-</details>
+</dd>
+<dt id="supertokens_python.supertokens.manage_session_post_response"><code class="name flex">
+<span>def <span class="ident">manage_session_post_response</span></span>(<span>session: SessionContainer, response: BaseResponse, user_context: Dict[str, Any])</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
 </dd>
 </dl>
 </section>
@@ -468,7 +770,7 @@ class Supertokens:
 <dl>
 <dt id="supertokens_python.supertokens.AppInfo"><code class="flex name class">
 <span>class <span class="ident">AppInfo</span></span>
-<span>(</span><span>app_name: str, api_domain: str, website_domain: str, framework: "Literal['fastapi', 'flask', 'django']", api_gateway_path: str, api_base_path: str, website_base_path: str, mode: "Union[Literal['asgi', 'wsgi'], None]")</span>
+<span>(</span><span>app_name: str, api_domain: str, website_domain: Optional[str], framework: "Literal[('fastapi', 'flask', 'django')]", api_gateway_path: str, api_base_path: str, website_base_path: str, mode: "Union[Literal[('asgi', 'wsgi')], None]", origin: Optional[Union[str, Callable[[Optional[BaseRequest], Dict[str, Any]], str]]])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -477,29 +779,95 @@ class Supertokens:
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class AppInfo:
-    def __init__(self, app_name: str, api_domain: str, website_domain: str,
-                 framework: Literal[&#39;fastapi&#39;, &#39;flask&#39;, &#39;django&#39;], api_gateway_path: str,
-                 api_base_path: str, website_base_path: str,
-                 mode: Union[Literal[&#39;asgi&#39;, &#39;wsgi&#39;], None]):
+    def __init__(
+        self,
+        app_name: str,
+        api_domain: str,
+        website_domain: Optional[str],
+        framework: Literal[&#34;fastapi&#34;, &#34;flask&#34;, &#34;django&#34;],
+        api_gateway_path: str,
+        api_base_path: str,
+        website_base_path: str,
+        mode: Union[Literal[&#34;asgi&#34;, &#34;wsgi&#34;], None],
+        origin: Optional[
+            Union[str, Callable[[Optional[BaseRequest], Dict[str, Any]], str]]
+        ],
+    ):
         self.app_name = app_name
-        self.api_gateway_path: NormalisedURLPath = NormalisedURLPath(
-            api_gateway_path)
-        self.api_domain: NormalisedURLDomain = NormalisedURLDomain(api_domain)
-        self.website_domain: NormalisedURLDomain = NormalisedURLDomain(
-            website_domain)
-        self.api_base_path: NormalisedURLPath = self.api_gateway_path.append(
-            NormalisedURLPath(api_base_path))
-        self.website_base_path: NormalisedURLPath = NormalisedURLPath(
-            website_base_path)
+        self.api_gateway_path = NormalisedURLPath(api_gateway_path)
+        self.api_domain = NormalisedURLDomain(api_domain)
+        self.top_level_api_domain = get_top_level_domain_for_same_site_resolution(
+            self.api_domain.get_as_string_dangerous()
+        )
+        if website_domain is None and origin is None:
+            raise_general_exception(
+                &#34;Please provide at least one of website_domain or origin&#34;
+            )
+        self.__origin = origin
+        self.__website_domain = website_domain
+        self.api_base_path = self.api_gateway_path.append(
+            NormalisedURLPath(api_base_path)
+        )
+        self.website_base_path = NormalisedURLPath(website_base_path)
         if mode is not None:
             self.mode = mode
-        elif framework == &#39;fastapi&#39;:
-            mode = &#39;asgi&#39;
+        elif framework == &#34;fastapi&#34;:
+            mode = &#34;asgi&#34;
         else:
-            mode = &#39;wsgi&#39;
+            mode = &#34;wsgi&#34;
         self.framework = framework
-        self.mode = mode</code></pre>
+        self.mode = mode
+
+    def get_top_level_website_domain(
+        self, request: Optional[BaseRequest], user_context: Dict[str, Any]
+    ) -&gt; str:
+        return get_top_level_domain_for_same_site_resolution(
+            self.get_origin(request, user_context).get_as_string_dangerous()
+        )
+
+    def get_origin(self, request: Optional[BaseRequest], user_context: Dict[str, Any]):
+        origin = self.__origin
+        if origin is None:
+            origin = self.__website_domain
+
+        # This should not be possible because we check for either origin or websiteDomain above
+        if origin is None:
+            raise_general_exception(&#34;should never come here&#34;)
+
+        if callable(origin):
+            origin = origin(request, user_context)
+
+        return NormalisedURLDomain(origin)
+
+    def toJSON(self):
+        def defaultImpl(o: Any):
+            if isinstance(o, (NormalisedURLDomain, NormalisedURLPath)):
+                return o.get_as_string_dangerous()
+            return o.__dict__
+
+        return json.dumps(self, default=defaultImpl, sort_keys=True, indent=4)</code></pre>
 </details>
+<h3>Methods</h3>
+<dl>
+<dt id="supertokens_python.supertokens.AppInfo.get_origin"><code class="name flex">
+<span>def <span class="ident">get_origin</span></span>(<span>self, request: Optional[BaseRequest], user_context: Dict[str, Any])</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="supertokens_python.supertokens.AppInfo.get_top_level_website_domain"><code class="name flex">
+<span>def <span class="ident">get_top_level_website_domain</span></span>(<span>self, request: Optional[BaseRequest], user_context: Dict[str, Any])</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="supertokens_python.supertokens.AppInfo.toJSON"><code class="name flex">
+<span>def <span class="ident">toJSON</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
 </dd>
 <dt id="supertokens_python.supertokens.Host"><code class="flex name class">
 <span>class <span class="ident">Host</span></span>
@@ -512,15 +880,14 @@ class Supertokens:
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Host:
-    def __init__(self, domain: NormalisedURLDomain,
-                 base_path: NormalisedURLPath):
+    def __init__(self, domain: NormalisedURLDomain, base_path: NormalisedURLPath):
         self.domain = domain
         self.base_path = base_path</code></pre>
 </details>
 </dd>
 <dt id="supertokens_python.supertokens.InputAppInfo"><code class="flex name class">
 <span>class <span class="ident">InputAppInfo</span></span>
-<span>(</span><span>app_name: str, api_domain: str, website_domain: str, api_gateway_path: str = '', api_base_path: str = '/auth', website_base_path: str = '/auth')</span>
+<span>(</span><span>app_name: str, api_domain: str, api_gateway_path: str = '', api_base_path: str = '/auth', website_base_path: str = '/auth', website_domain: Optional[str] = None, origin: Optional[Union[str, Callable[[Optional[BaseRequest], Dict[str, Any]], str]]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -529,25 +896,30 @@ class Supertokens:
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class InputAppInfo:
-    def __init__(self,
-                 app_name: str,
-                 api_domain: str,
-                 website_domain: str,
-                 api_gateway_path: str = &#39;&#39;,
-                 api_base_path: str = &#39;/auth&#39;,
-                 website_base_path: str = &#39;/auth&#39;,
-                 ):
+    def __init__(
+        self,
+        app_name: str,
+        api_domain: str,
+        api_gateway_path: str = &#34;&#34;,
+        api_base_path: str = &#34;/auth&#34;,
+        website_base_path: str = &#34;/auth&#34;,
+        website_domain: Optional[str] = None,
+        origin: Optional[
+            Union[str, Callable[[Optional[BaseRequest], Dict[str, Any]], str]]
+        ] = None,
+    ):
         self.app_name = app_name
         self.api_gateway_path = api_gateway_path
         self.api_domain = api_domain
         self.website_domain = website_domain
+        self.origin = origin
         self.api_base_path = api_base_path
         self.website_base_path = website_base_path</code></pre>
 </details>
 </dd>
 <dt id="supertokens_python.supertokens.Supertokens"><code class="flex name class">
 <span>class <span class="ident">Supertokens</span></span>
-<span>(</span><span>app_info: <a title="supertokens_python.supertokens.InputAppInfo" href="#supertokens_python.supertokens.InputAppInfo">InputAppInfo</a>, framework: "Literal['fastapi', 'flask', 'django']", supertokens_config: <a title="supertokens_python.supertokens.SupertokensConfig" href="#supertokens_python.supertokens.SupertokensConfig">SupertokensConfig</a>, recipe_list: List[Callable[[<a title="supertokens_python.supertokens.AppInfo" href="#supertokens_python.supertokens.AppInfo">AppInfo</a>], RecipeModule]], mode: "Union[Literal['asgi', 'wsgi'], None]", telemetry: Union[bool, None])</span>
+<span>(</span><span>app_info: <a title="supertokens_python.supertokens.InputAppInfo" href="#supertokens_python.supertokens.InputAppInfo">InputAppInfo</a>, framework: "Literal[('fastapi', 'flask', 'django')]", supertokens_config: <a title="supertokens_python.supertokens.SupertokensConfig" href="#supertokens_python.supertokens.SupertokensConfig">SupertokensConfig</a>, recipe_list: List[Callable[[<a title="supertokens_python.supertokens.AppInfo" href="#supertokens_python.supertokens.AppInfo">AppInfo</a>], RecipeModule]], mode: "Optional[Literal[('asgi', 'wsgi')]]", telemetry: Optional[bool], debug: Optional[bool])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -558,14 +930,19 @@ class Supertokens:
 <pre><code class="python">class Supertokens:
     __instance = None
 
-    def __init__(self,
-                 app_info: InputAppInfo,
-                 framework: Literal[&#39;fastapi&#39;, &#39;flask&#39;, &#39;django&#39;],
-                 supertokens_config: SupertokensConfig,
-                 recipe_list: List[Callable[[AppInfo], RecipeModule]],
-                 mode: Union[Literal[&#39;asgi&#39;, &#39;wsgi&#39;], None],
-                 telemetry: Union[bool, None]
-                 ):
+    def __init__(
+        self,
+        app_info: InputAppInfo,
+        framework: Literal[&#34;fastapi&#34;, &#34;flask&#34;, &#34;django&#34;],
+        supertokens_config: SupertokensConfig,
+        recipe_list: List[Callable[[AppInfo], RecipeModule]],
+        mode: Optional[Literal[&#34;asgi&#34;, &#34;wsgi&#34;]],
+        telemetry: Optional[bool],
+        debug: Optional[bool],
+    ):
+        if not isinstance(app_info, InputAppInfo):  # type: ignore
+            raise ValueError(&#34;app_info must be an instance of InputAppInfo&#34;)
+
         self.app_info = AppInfo(
             app_info.app_name,
             app_info.api_domain,
@@ -574,71 +951,141 @@ class Supertokens:
             app_info.api_gateway_path,
             app_info.api_base_path,
             app_info.website_base_path,
-            mode
+            mode,
+            app_info.origin,
         )
-        hosts = list(map(lambda h: Host(NormalisedURLDomain(h.strip()), NormalisedURLPath(h.strip())),
-                         filter(lambda x: x != &#39;&#39;, supertokens_config.connection_uri.split(&#39;;&#39;))))
-        Querier.init(hosts, supertokens_config.api_key)
+        self.supertokens_config = supertokens_config
+        if debug is True:
+            enable_debug_logging()
+        self._telemetry_status: str = &#34;NONE&#34;
+        log_debug_message(
+            &#34;Started SuperTokens with debug logging (supertokens.init called)&#34;
+        )
+        log_debug_message(&#34;app_info: %s&#34;, self.app_info.toJSON())
+        log_debug_message(&#34;framework: %s&#34;, framework)
+        hosts = list(
+            map(
+                lambda h: Host(
+                    NormalisedURLDomain(h.strip()), NormalisedURLPath(h.strip())
+                ),
+                filter(lambda x: x != &#34;&#34;, supertokens_config.connection_uri.split(&#34;;&#34;)),
+            )
+        )
+        Querier.init(
+            hosts,
+            supertokens_config.api_key,
+            supertokens_config.network_interceptor,
+            supertokens_config.disable_core_call_cache,
+        )
 
         if len(recipe_list) == 0:
             raise_general_exception(
-                &#39;Please provide at least one recipe to the supertokens.init function call&#39;)
+                &#34;Please provide at least one recipe to the supertokens.init function call&#34;
+            )
 
-        self.recipe_modules: List[RecipeModule] = list(
-            map(lambda func: func(self.app_info), recipe_list))
+        multitenancy_found = False
+        totp_found = False
+        user_metadata_found = False
+        multi_factor_auth_found = False
+        oauth2_found = False
+        openid_found = False
+        jwt_found = False
 
-        if telemetry is None:
-            telemetry = (&#39;SUPERTOKENS_ENV&#39; not in environ) or (
-                environ[&#39;SUPERTOKENS_ENV&#39;] != &#39;testing&#39;)
+        def make_recipe(recipe: Callable[[AppInfo], RecipeModule]) -&gt; RecipeModule:
+            nonlocal \
+                multitenancy_found, \
+                totp_found, \
+                user_metadata_found, \
+                multi_factor_auth_found, \
+                oauth2_found, \
+                openid_found, \
+                jwt_found
+            recipe_module = recipe(self.app_info)
+            if recipe_module.get_recipe_id() == &#34;multitenancy&#34;:
+                multitenancy_found = True
+            elif recipe_module.get_recipe_id() == &#34;usermetadata&#34;:
+                user_metadata_found = True
+            elif recipe_module.get_recipe_id() == &#34;multifactorauth&#34;:
+                multi_factor_auth_found = True
+            elif recipe_module.get_recipe_id() == &#34;totp&#34;:
+                totp_found = True
+            elif recipe_module.get_recipe_id() == &#34;oauth2provider&#34;:
+                oauth2_found = True
+            elif recipe_module.get_recipe_id() == &#34;openid&#34;:
+                openid_found = True
+            elif recipe_module.get_recipe_id() == &#34;jwt&#34;:
+                jwt_found = True
+            return recipe_module
 
-        if telemetry:
-            if self.app_info.framework.lower(
-            ) == &#39;flask&#39; or self.app_info.framework.lower() == &#39;django&#39;:
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(self.send_telemetry())
-            else:
-                asyncio.create_task(self.send_telemetry())
+        self.recipe_modules: List[RecipeModule] = list(map(make_recipe, recipe_list))
 
-    async def send_telemetry(self):
-        try:
-            querier = Querier.get_instance(None)
-            response = await querier.send_get_request(NormalisedURLPath(TELEMETRY), {})
-            telemetry_id = None
-            if &#39;exists&#39; in response and response[&#39;exists&#39;] and &#39;telemetry_id&#39; in response:
-                telemetry_id = response[&#39;telemetry_id&#39;]
-            data = {
-                &#39;appName&#39;: self.app_info.app_name,
-                &#39;websiteDomain&#39;: self.app_info.website_domain.get_as_string_dangerous(),
-                &#39;sdk&#39;: &#39;python&#39;
-            }
-            if telemetry_id is not None:
-                data = {
-                    **data,
-                    &#39;telemetryId&#39;: telemetry_id
-                }
-            async with AsyncClient() as client:
-                await client.post(url=TELEMETRY_SUPERTOKENS_API_URL, json=data,  # type: ignore
-                                  headers={&#39;api-version&#39;: TELEMETRY_SUPERTOKENS_API_VERSION})
-        except Exception:
-            pass
+        if not jwt_found:
+            from supertokens_python.recipe.jwt.recipe import JWTRecipe
+
+            self.recipe_modules.append(JWTRecipe.init()(self.app_info))
+
+        if not openid_found:
+            from supertokens_python.recipe.openid.recipe import OpenIdRecipe
+
+            self.recipe_modules.append(OpenIdRecipe.init()(self.app_info))
+
+        if not multitenancy_found:
+            from supertokens_python.recipe.multitenancy.recipe import MultitenancyRecipe
+
+            self.recipe_modules.append(MultitenancyRecipe.init()(self.app_info))
+
+        if totp_found and not multi_factor_auth_found:
+            raise Exception(&#34;Please initialize the MultiFactorAuth recipe to use TOTP.&#34;)
+
+        if not user_metadata_found:
+            from supertokens_python.recipe.usermetadata.recipe import UserMetadataRecipe
+
+            self.recipe_modules.append(UserMetadataRecipe.init()(self.app_info))
+
+        if not oauth2_found:
+            from supertokens_python.recipe.oauth2provider.recipe import (
+                OAuth2ProviderRecipe,
+            )
+
+            self.recipe_modules.append(OAuth2ProviderRecipe.init()(self.app_info))
+
+        self.telemetry = (
+            telemetry
+            if telemetry is not None
+            else (environ.get(&#34;TEST_MODE&#34;) != &#34;testing&#34;)
+        )
 
     @staticmethod
-    def init(app_info: InputAppInfo,
-             framework: Literal[&#39;fastapi&#39;, &#39;flask&#39;, &#39;django&#39;],
-             supertokens_config: SupertokensConfig,
-             recipe_list: List[Callable[[AppInfo], RecipeModule]],
-             mode: Union[Literal[&#39;asgi&#39;, &#39;wsgi&#39;], None],
-             telemetry: Union[bool, None]):
+    def init(
+        app_info: InputAppInfo,
+        framework: Literal[&#34;fastapi&#34;, &#34;flask&#34;, &#34;django&#34;],
+        supertokens_config: SupertokensConfig,
+        recipe_list: List[Callable[[AppInfo], RecipeModule]],
+        mode: Optional[Literal[&#34;asgi&#34;, &#34;wsgi&#34;]],
+        telemetry: Optional[bool],
+        debug: Optional[bool],
+    ):
         if Supertokens.__instance is None:
             Supertokens.__instance = Supertokens(
-                app_info, framework, supertokens_config, recipe_list, mode, telemetry)
+                app_info,
+                framework,
+                supertokens_config,
+                recipe_list,
+                mode,
+                telemetry,
+                debug,
+            )
+            PostSTInitCallbacks.run_post_init_callbacks()
 
     @staticmethod
     def reset():
-        if (&#39;SUPERTOKENS_ENV&#39; not in environ) or (
-                environ[&#39;SUPERTOKENS_ENV&#39;] != &#39;testing&#39;):
-            raise_general_exception(
-                &#39;calling testing function in non testing env&#39;)
+        if (&#34;SUPERTOKENS_ENV&#34; not in environ) or (
+            environ[&#34;SUPERTOKENS_ENV&#34;] != &#34;testing&#34;
+        ):
+            raise_general_exception(&#34;calling testing function in non testing env&#34;)
+        from supertokens_python.recipe.usermetadata.recipe import UserMetadataRecipe
+
+        UserMetadataRecipe.reset()
         Querier.reset()
         Supertokens.__instance = None
 
@@ -647,7 +1094,8 @@ class Supertokens:
         if Supertokens.__instance is not None:
             return Supertokens.__instance
         raise_general_exception(
-            &#39;Initialisation not done. Did you forget to call the SuperTokens.init function?&#39;)
+            &#34;Initialisation not done. Did you forget to call the SuperTokens.init function?&#34;
+        )
 
     def get_all_cors_headers(self) -&gt; List[str]:
         headers_set: Set[str] = set()
@@ -660,132 +1108,334 @@ class Supertokens:
 
         return list(headers_set)
 
-    async def get_user_count(self, include_recipe_ids: Union[None, List[str]]) -&gt; int:  # pylint: disable=no-self-use
+    async def get_user_count(
+        self,
+        include_recipe_ids: Union[None, List[str]],
+        tenant_id: Optional[str] = None,
+        user_context: Optional[Dict[str, Any]] = None,
+    ) -&gt; int:
         querier = Querier.get_instance(None)
         include_recipe_ids_str = None
         if include_recipe_ids is not None:
-            include_recipe_ids_str = &#39;,&#39;.join(include_recipe_ids)
+            include_recipe_ids_str = &#34;,&#34;.join(include_recipe_ids)
 
-        response = await querier.send_get_request(NormalisedURLPath(USER_COUNT), {
-            &#34;includeRecipeIds&#34;: include_recipe_ids_str
-        })
+        response = await querier.send_get_request(
+            NormalisedURLPath(f&#34;/{tenant_id or &#39;public&#39;}{USER_COUNT}&#34;),
+            {
+                &#34;includeRecipeIds&#34;: include_recipe_ids_str,
+                &#34;includeAllTenants&#34;: tenant_id is None,
+            },
+            user_context=user_context,
+        )
 
-        return int(response[&#39;count&#39;])
+        return int(response[&#34;count&#34;])
 
-    async def delete_user(self, user_id: str) -&gt; None:  # pylint: disable=no-self-use
+    async def create_user_id_mapping(
+        self,
+        supertokens_user_id: str,
+        external_user_id: str,
+        external_user_id_info: Optional[str],
+        force: Optional[bool],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; Union[
+        CreateUserIdMappingOkResult,
+        UnknownSupertokensUserIDError,
+        UserIdMappingAlreadyExistsError,
+    ]:
         querier = Querier.get_instance(None)
 
-        cdi_version = await querier.get_api_version()
+        cdi_version = await querier.get_api_version(user_context)
 
-        if compare_version(cdi_version, &#34;2.10&#34;) == cdi_version:
-            await querier.send_post_request(NormalisedURLPath(USER_DELETE), {
-                &#34;userId&#34;: user_id
-            })
-
-            return None
-        raise_general_exception(
-            &#39;Please upgrade the SuperTokens core to &gt;= 3.7.0&#39;)
-
-    async def get_users(self, time_joined_order: Literal[&#39;ASC&#39;, &#39;DESC&#39;],  # pylint: disable=no-self-use
-                        limit: Union[int, None], pagination_token: Union[str, None],
-                        include_recipe_ids: Union[None, List[str]]) -&gt; UsersResponse:
-        querier = Querier.get_instance(None)
-        params = {
-            &#39;timeJoinedOrder&#39;: time_joined_order
-        }
-        if limit is not None:
-            params = {
-                &#39;limit&#39;: limit,
-                **params
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            body: Dict[str, Any] = {
+                &#34;superTokensUserId&#34;: supertokens_user_id,
+                &#34;externalUserId&#34;: external_user_id,
+                &#34;externalUserIdInfo&#34;: external_user_id_info,
             }
-        if pagination_token is not None:
-            params = {
-                &#39;paginationToken&#39;: pagination_token,
-                **params
-            }
+            if force:
+                body[&#34;force&#34;] = force
 
-        include_recipe_ids_str = None
-        if include_recipe_ids is not None:
-            include_recipe_ids_str = &#39;,&#39;.join(include_recipe_ids)
-
-        params = {
-            &#39;paginationToken&#39;: include_recipe_ids_str,
-            **params
-        }
-
-        response = await querier.send_get_request(NormalisedURLPath(USERS), params)
-        next_pagination_token = None
-        if &#39;nextPaginationToken&#39; in response:
-            next_pagination_token = response[&#39;nextPaginationToken&#39;]
-        users_list = response[&#39;users&#39;]
-        users: List[User] = []
-        for user in users_list:
-            recipe_id = user[&#39;recipeId&#39;]
-            user_obj = user[&#39;user&#39;]
-            third_party = None
-            if &#39;thirdParty&#39; in user_obj:
-                third_party = ThirdPartyInfo(
-                    user_obj[&#39;thirdParty&#39;][&#39;userId&#39;],
-                    user_obj[&#39;thirdParty&#39;][&#39;id&#39;]
+            res = await querier.send_post_request(
+                NormalisedURLPath(&#34;/recipe/userid/map&#34;), body, user_context=user_context
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return CreateUserIdMappingOkResult()
+            if res[&#34;status&#34;] == &#34;UNKNOWN_SUPERTOKENS_USER_ID_ERROR&#34;:
+                return UnknownSupertokensUserIDError()
+            if res[&#34;status&#34;] == &#34;USER_ID_MAPPING_ALREADY_EXISTS_ERROR&#34;:
+                return UserIdMappingAlreadyExistsError(
+                    does_super_tokens_user_id_exist=res[&#34;doesSuperTokensUserIdExist&#34;],
+                    does_external_user_id_exist=res[&#34;does_external_user_id_exist&#34;],
                 )
-            email = None
-            if &#39;email&#39; in user_obj:
-                email = user_obj[&#39;email&#39;]
-            phone_number = None
-            if &#39;phoneNumber&#39; in user_obj:
-                phone_number = user_obj[&#39;phoneNumber&#39;]
-            users.append(User(
-                recipe_id, user_obj[&#39;id&#39;], user_obj[&#39;timeJoined&#39;], email, phone_number, third_party))
 
-        return UsersResponse(users, next_pagination_token)
+            raise_general_exception(&#34;Unknown response&#34;)
 
-    async def middleware(self, request: BaseRequest, response: BaseResponse) -&gt; Union[BaseResponse, None]:  # pylint: disable=no-self-use
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def get_user_id_mapping(
+        self,
+        user_id: str,
+        user_id_type: Optional[UserIDTypes],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; Union[GetUserIdMappingOkResult, UnknownMappingError]:
+        querier = Querier.get_instance(None)
+
+        cdi_version = await querier.get_api_version(user_context)
+
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            body = {
+                &#34;userId&#34;: user_id,
+            }
+            if user_id_type:
+                body[&#34;userIdType&#34;] = user_id_type
+            res = await querier.send_get_request(
+                NormalisedURLPath(&#34;/recipe/userid/map&#34;),
+                body,
+                user_context=user_context,
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return GetUserIdMappingOkResult(
+                    supertokens_user_id=res[&#34;superTokensUserId&#34;],
+                    external_user_id=res[&#34;externalUserId&#34;],
+                    external_user_info=res.get(&#34;externalUserIdInfo&#34;),
+                )
+            if res[&#34;status&#34;] == &#34;UNKNOWN_MAPPING_ERROR&#34;:
+                return UnknownMappingError()
+
+            raise_general_exception(&#34;Unknown response&#34;)
+
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def delete_user_id_mapping(
+        self,
+        user_id: str,
+        user_id_type: Optional[UserIDTypes],
+        force: Optional[bool],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; DeleteUserIdMappingOkResult:
+        querier = Querier.get_instance(None)
+
+        cdi_version = await querier.get_api_version(user_context)
+
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            body: Dict[str, Any] = {
+                &#34;userId&#34;: user_id,
+                &#34;userIdType&#34;: user_id_type,
+            }
+            if force:
+                body[&#34;force&#34;] = force
+            res = await querier.send_post_request(
+                NormalisedURLPath(&#34;/recipe/userid/map/remove&#34;),
+                body,
+                user_context=user_context,
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return DeleteUserIdMappingOkResult(
+                    did_mapping_exist=res[&#34;didMappingExist&#34;]
+                )
+
+            raise_general_exception(&#34;Unknown response&#34;)
+
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def update_or_delete_user_id_mapping_info(
+        self,
+        user_id: str,
+        user_id_type: Optional[UserIDTypes],
+        external_user_id_info: Optional[str],
+        user_context: Optional[Dict[str, Any]],
+    ) -&gt; Union[UpdateOrDeleteUserIdMappingInfoOkResult, UnknownMappingError]:
+        querier = Querier.get_instance(None)
+
+        cdi_version = await querier.get_api_version(user_context)
+
+        if is_version_gte(cdi_version, &#34;2.15&#34;):
+            res = await querier.send_post_request(
+                NormalisedURLPath(&#34;/recipe/userid/external-user-id-info&#34;),
+                {
+                    &#34;userId&#34;: user_id,
+                    &#34;userIdType&#34;: user_id_type,
+                    &#34;externalUserIdInfo&#34;: external_user_id_info,
+                },
+                user_context=user_context,
+            )
+            if res[&#34;status&#34;] == &#34;OK&#34;:
+                return UpdateOrDeleteUserIdMappingInfoOkResult()
+            if res[&#34;status&#34;] == &#34;UNKNOWN_MAPPING_ERROR&#34;:
+                return UnknownMappingError()
+
+            raise_general_exception(&#34;Unknown response&#34;)
+
+        raise_general_exception(&#34;Please upgrade the SuperTokens core to &gt;= 3.15.0&#34;)
+
+    async def middleware(
+        self, request: BaseRequest, response: BaseResponse, user_context: Dict[str, Any]
+    ) -&gt; Union[BaseResponse, None]:
+        log_debug_message(&#34;middleware: Started&#34;)
         path = Supertokens.get_instance().app_info.api_gateway_path.append(
-            NormalisedURLPath(
-                request.get_path()))
+            NormalisedURLPath(request.get_path())
+        )
         method = normalise_http_method(request.method())
 
-        if not path.startswith(
-                Supertokens.get_instance().app_info.api_base_path):
+        if not path.startswith(Supertokens.get_instance().app_info.api_base_path):
+            log_debug_message(
+                &#34;middleware: Not handling because request path did not start with api base path. Request path: %s&#34;,
+                path.get_as_string_dangerous(),
+            )
             return None
-        request_rid = get_rid_from_request(request)
-        if request_rid is not None and request_rid == &#39;anti-csrf&#39;:
-            # see
-            # https://github.com/supertokens/supertokens-python/issues/54
+        request_rid = get_rid_from_header(request)
+        log_debug_message(
+            &#34;middleware: requestRID is: %s&#34;, get_maybe_none_as_str(request_rid)
+        )
+        if request_rid is not None and request_rid == &#34;anti-csrf&#34;:
+            # see https://github.com/supertokens/supertokens-python/issues/54
             request_rid = None
-        request_id = None
-        matched_recipe = None
-        if request_rid is not None:
-            for recipe in Supertokens.get_instance().recipe_modules:
-                if recipe.get_recipe_id() == request_rid:
-                    matched_recipe = recipe
-                    break
-            if matched_recipe is not None:
-                request_id = matched_recipe.return_api_id_if_can_handle_request(
-                    path, method)
-        else:
-            for recipe in Supertokens.get_instance().recipe_modules:
-                request_id = recipe.return_api_id_if_can_handle_request(
-                    path, method)
-                if request_id is not None:
-                    matched_recipe = recipe
-                    break
-        if request_id is not None and matched_recipe is not None:
-            return await matched_recipe.handle_api_request(request_id, request, path, method, response)
-        return None
 
-    async def handle_supertokens_error(self, request: BaseRequest, err: Exception, response: BaseResponse):
+        async def handle_without_rid():
+            for recipe in self.recipe_modules:
+                log_debug_message(
+                    &#34;middleware: Checking recipe ID for match: %s with path: %s and method: %s&#34;,
+                    recipe.get_recipe_id(),
+                    path.get_as_string_dangerous(),
+                    method,
+                )
+                api_and_tenant_id = await recipe.return_api_id_if_can_handle_request(
+                    path, method, user_context
+                )
+                if api_and_tenant_id is not None:
+                    log_debug_message(
+                        &#34;middleware: Request being handled by recipe. ID is: %s&#34;,
+                        api_and_tenant_id.api_id,
+                    )
+                    api_resp = await recipe.handle_api_request(
+                        api_and_tenant_id.api_id,
+                        api_and_tenant_id.tenant_id,
+                        request,
+                        path,
+                        method,
+                        response,
+                        user_context,
+                    )
+                    if api_resp is None:
+                        log_debug_message(
+                            &#34;middleware: Not handled because API returned None&#34;
+                        )
+                        return None
+                    log_debug_message(&#34;middleware: Ended&#34;)
+                    return api_resp
+            log_debug_message(&#34;middleware: Not handling because no recipe matched&#34;)
+            return None
+
+        if request_rid is not None:
+            matched_recipes = [
+                recipe
+                for recipe in self.recipe_modules
+                if recipe.get_recipe_id() == request_rid
+                or (
+                    request_rid == &#34;thirdpartyemailpassword&#34;
+                    and recipe.get_recipe_id() in [&#34;thirdparty&#34;, &#34;emailpassword&#34;]
+                )
+                or (
+                    request_rid == &#34;thirdpartypasswordless&#34;
+                    and recipe.get_recipe_id() in [&#34;thirdparty&#34;, &#34;passwordless&#34;]
+                )
+            ]
+
+            if len(matched_recipes) == 0:
+                log_debug_message(
+                    &#34;middleware: Not handling based on rid match. Trying without rid.&#34;
+                )
+                return await handle_without_rid()
+
+            for recipe in matched_recipes:
+                log_debug_message(
+                    &#34;middleware: Matched with recipe Ids: %s&#34;, recipe.get_recipe_id()
+                )
+
+            id_result = None
+            final_matched_recipe = None
+            for recipe in matched_recipes:
+                current_id_result = await recipe.return_api_id_if_can_handle_request(
+                    path, method, user_context
+                )
+                if current_id_result is not None:
+                    if id_result is not None:
+                        raise ValueError(
+                            &#34;Two recipes have matched the same API path and method! This is a bug in the SDK. Please contact support.&#34;
+                        )
+                    final_matched_recipe = recipe
+                    id_result = current_id_result
+
+            if id_result is None or final_matched_recipe is None:
+                return await handle_without_rid()
+
+            log_debug_message(
+                &#34;middleware: Request being handled by recipe. ID is: %s&#34;,
+                id_result.api_id,
+            )
+            request_handled = await final_matched_recipe.handle_api_request(
+                id_result.api_id,
+                id_result.tenant_id,
+                request,
+                path,
+                method,
+                response,
+                user_context,
+            )
+            if request_handled is None:
+                log_debug_message(
+                    &#34;middleware: Not handled because API returned request_handled as None&#34;
+                )
+                return None
+            log_debug_message(&#34;middleware: Ended&#34;)
+            return request_handled
+        return await handle_without_rid()
+
+    async def handle_supertokens_error(
+        self,
+        request: BaseRequest,
+        err: Exception,
+        response: BaseResponse,
+        user_context: Dict[str, Any],
+    ) -&gt; Optional[BaseResponse]:
+        log_debug_message(&#34;errorHandler: Started&#34;)
+        log_debug_message(
+            &#34;errorHandler: Error is from SuperTokens recipe. Message: %s&#34;, str(err)
+        )
         if isinstance(err, GeneralError):
             raise err
 
         if isinstance(err, BadInputError):
-            return send_non_200_response(str(err), 400, response)
+            log_debug_message(&#34;errorHandler: Sending 400 status code response&#34;)
+            return send_non_200_response_with_message(str(err), 400, response)
 
         for recipe in self.recipe_modules:
-            if recipe.is_error_from_this_recipe_based_on_instance(
-                    err) and isinstance(err, SuperTokensError):
-                return await recipe.handle_error(request, err, response)
-        raise err</code></pre>
+            log_debug_message(
+                &#34;errorHandler: Checking recipe for match: %s&#34;, recipe.get_recipe_id()
+            )
+            if recipe.is_error_from_this_recipe_based_on_instance(err) and isinstance(
+                err, SuperTokensError
+            ):
+                log_debug_message(
+                    &#34;errorHandler: Matched with recipeID: %s&#34;, recipe.get_recipe_id()
+                )
+                return await recipe.handle_error(request, err, response, user_context)
+        raise err
+
+    def get_request_from_user_context(
+        self,
+        user_context: Optional[Dict[str, Any]] = None,
+    ) -&gt; Optional[BaseRequest]:
+        if user_context is None:
+            return None
+
+        if &#34;_default&#34; not in user_context:
+            return None
+
+        if not isinstance(user_context[&#34;_default&#34;], dict):
+            return None
+
+        return user_context.get(&#34;_default&#34;, {}).get(&#34;request&#34;)</code></pre>
 </details>
 <h3>Static methods</h3>
 <dl>
@@ -794,297 +1444,81 @@ class Supertokens:
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@staticmethod
-def get_instance() -&gt; Supertokens:
-    if Supertokens.__instance is not None:
-        return Supertokens.__instance
-    raise_general_exception(
-        &#39;Initialisation not done. Did you forget to call the SuperTokens.init function?&#39;)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.supertokens.Supertokens.init"><code class="name flex">
-<span>def <span class="ident">init</span></span>(<span>app_info: <a title="supertokens_python.supertokens.InputAppInfo" href="#supertokens_python.supertokens.InputAppInfo">InputAppInfo</a>, framework: "Literal['fastapi', 'flask', 'django']", supertokens_config: <a title="supertokens_python.supertokens.SupertokensConfig" href="#supertokens_python.supertokens.SupertokensConfig">SupertokensConfig</a>, recipe_list: List[Callable[[<a title="supertokens_python.supertokens.AppInfo" href="#supertokens_python.supertokens.AppInfo">AppInfo</a>], RecipeModule]], mode: "Union[Literal['asgi', 'wsgi'], None]", telemetry: Union[bool, None])</span>
+<span>def <span class="ident">init</span></span>(<span>app_info: <a title="supertokens_python.supertokens.InputAppInfo" href="#supertokens_python.supertokens.InputAppInfo">InputAppInfo</a>, framework: "Literal[('fastapi', 'flask', 'django')]", supertokens_config: <a title="supertokens_python.supertokens.SupertokensConfig" href="#supertokens_python.supertokens.SupertokensConfig">SupertokensConfig</a>, recipe_list: List[Callable[[<a title="supertokens_python.supertokens.AppInfo" href="#supertokens_python.supertokens.AppInfo">AppInfo</a>], RecipeModule]], mode: "Optional[Literal[('asgi', 'wsgi')]]", telemetry: Optional[bool], debug: Optional[bool])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@staticmethod
-def init(app_info: InputAppInfo,
-         framework: Literal[&#39;fastapi&#39;, &#39;flask&#39;, &#39;django&#39;],
-         supertokens_config: SupertokensConfig,
-         recipe_list: List[Callable[[AppInfo], RecipeModule]],
-         mode: Union[Literal[&#39;asgi&#39;, &#39;wsgi&#39;], None],
-         telemetry: Union[bool, None]):
-    if Supertokens.__instance is None:
-        Supertokens.__instance = Supertokens(
-            app_info, framework, supertokens_config, recipe_list, mode, telemetry)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.supertokens.Supertokens.reset"><code class="name flex">
 <span>def <span class="ident">reset</span></span>(<span>)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@staticmethod
-def reset():
-    if (&#39;SUPERTOKENS_ENV&#39; not in environ) or (
-            environ[&#39;SUPERTOKENS_ENV&#39;] != &#39;testing&#39;):
-        raise_general_exception(
-            &#39;calling testing function in non testing env&#39;)
-    Querier.reset()
-    Supertokens.__instance = None</code></pre>
-</details>
 </dd>
 </dl>
 <h3>Methods</h3>
 <dl>
-<dt id="supertokens_python.supertokens.Supertokens.delete_user"><code class="name flex">
-<span>async def <span class="ident">delete_user</span></span>(<span>self, user_id: str) ‑> None</span>
+<dt id="supertokens_python.supertokens.Supertokens.create_user_id_mapping"><code class="name flex">
+<span>async def <span class="ident">create_user_id_mapping</span></span>(<span>self, supertokens_user_id: str, external_user_id: str, external_user_id_info: Optional[str], force: Optional[bool], user_context: Optional[Dict[str, Any]]) ‑> Union[<a title="supertokens_python.interfaces.CreateUserIdMappingOkResult" href="interfaces.html#supertokens_python.interfaces.CreateUserIdMappingOkResult">CreateUserIdMappingOkResult</a>, <a title="supertokens_python.interfaces.UnknownSupertokensUserIDError" href="interfaces.html#supertokens_python.interfaces.UnknownSupertokensUserIDError">UnknownSupertokensUserIDError</a>, <a title="supertokens_python.interfaces.UserIdMappingAlreadyExistsError" href="interfaces.html#supertokens_python.interfaces.UserIdMappingAlreadyExistsError">UserIdMappingAlreadyExistsError</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def delete_user(self, user_id: str) -&gt; None:  # pylint: disable=no-self-use
-    querier = Querier.get_instance(None)
-
-    cdi_version = await querier.get_api_version()
-
-    if compare_version(cdi_version, &#34;2.10&#34;) == cdi_version:
-        await querier.send_post_request(NormalisedURLPath(USER_DELETE), {
-            &#34;userId&#34;: user_id
-        })
-
-        return None
-    raise_general_exception(
-        &#39;Please upgrade the SuperTokens core to &gt;= 3.7.0&#39;)</code></pre>
-</details>
+</dd>
+<dt id="supertokens_python.supertokens.Supertokens.delete_user_id_mapping"><code class="name flex">
+<span>async def <span class="ident">delete_user_id_mapping</span></span>(<span>self, user_id: str, user_id_type: Optional[UserIDTypes], force: Optional[bool], user_context: Optional[Dict[str, Any]]) ‑> <a title="supertokens_python.interfaces.DeleteUserIdMappingOkResult" href="interfaces.html#supertokens_python.interfaces.DeleteUserIdMappingOkResult">DeleteUserIdMappingOkResult</a></span>
+</code></dt>
+<dd>
+<div class="desc"></div>
 </dd>
 <dt id="supertokens_python.supertokens.Supertokens.get_all_cors_headers"><code class="name flex">
 <span>def <span class="ident">get_all_cors_headers</span></span>(<span>self) ‑> List[str]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_all_cors_headers(self) -&gt; List[str]:
-    headers_set: Set[str] = set()
-    headers_set.add(RID_KEY_HEADER)
-    headers_set.add(FDI_KEY_HEADER)
-    for recipe in self.recipe_modules:
-        headers = recipe.get_all_cors_headers()
-        for header in headers:
-            headers_set.add(header)
-
-    return list(headers_set)</code></pre>
-</details>
+</dd>
+<dt id="supertokens_python.supertokens.Supertokens.get_request_from_user_context"><code class="name flex">
+<span>def <span class="ident">get_request_from_user_context</span></span>(<span>self, user_context: Optional[Dict[str, Any]] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
 </dd>
 <dt id="supertokens_python.supertokens.Supertokens.get_user_count"><code class="name flex">
-<span>async def <span class="ident">get_user_count</span></span>(<span>self, include_recipe_ids: Union[None, List[str]]) ‑> int</span>
+<span>async def <span class="ident">get_user_count</span></span>(<span>self, include_recipe_ids: Union[None, List[str]], tenant_id: Optional[str] = None, user_context: Optional[Dict[str, Any]] = None) ‑> int</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_user_count(self, include_recipe_ids: Union[None, List[str]]) -&gt; int:  # pylint: disable=no-self-use
-    querier = Querier.get_instance(None)
-    include_recipe_ids_str = None
-    if include_recipe_ids is not None:
-        include_recipe_ids_str = &#39;,&#39;.join(include_recipe_ids)
-
-    response = await querier.send_get_request(NormalisedURLPath(USER_COUNT), {
-        &#34;includeRecipeIds&#34;: include_recipe_ids_str
-    })
-
-    return int(response[&#39;count&#39;])</code></pre>
-</details>
 </dd>
-<dt id="supertokens_python.supertokens.Supertokens.get_users"><code class="name flex">
-<span>async def <span class="ident">get_users</span></span>(<span>self, time_joined_order: "Literal['ASC', 'DESC']", limit: Union[int, None], pagination_token: Union[str, None], include_recipe_ids: Union[None, List[str]]) ‑> <a title="supertokens_python.types.UsersResponse" href="types.html#supertokens_python.types.UsersResponse">UsersResponse</a></span>
+<dt id="supertokens_python.supertokens.Supertokens.get_user_id_mapping"><code class="name flex">
+<span>async def <span class="ident">get_user_id_mapping</span></span>(<span>self, user_id: str, user_id_type: Optional[UserIDTypes], user_context: Optional[Dict[str, Any]]) ‑> Union[<a title="supertokens_python.interfaces.GetUserIdMappingOkResult" href="interfaces.html#supertokens_python.interfaces.GetUserIdMappingOkResult">GetUserIdMappingOkResult</a>, <a title="supertokens_python.interfaces.UnknownMappingError" href="interfaces.html#supertokens_python.interfaces.UnknownMappingError">UnknownMappingError</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_users(self, time_joined_order: Literal[&#39;ASC&#39;, &#39;DESC&#39;],  # pylint: disable=no-self-use
-                    limit: Union[int, None], pagination_token: Union[str, None],
-                    include_recipe_ids: Union[None, List[str]]) -&gt; UsersResponse:
-    querier = Querier.get_instance(None)
-    params = {
-        &#39;timeJoinedOrder&#39;: time_joined_order
-    }
-    if limit is not None:
-        params = {
-            &#39;limit&#39;: limit,
-            **params
-        }
-    if pagination_token is not None:
-        params = {
-            &#39;paginationToken&#39;: pagination_token,
-            **params
-        }
-
-    include_recipe_ids_str = None
-    if include_recipe_ids is not None:
-        include_recipe_ids_str = &#39;,&#39;.join(include_recipe_ids)
-
-    params = {
-        &#39;paginationToken&#39;: include_recipe_ids_str,
-        **params
-    }
-
-    response = await querier.send_get_request(NormalisedURLPath(USERS), params)
-    next_pagination_token = None
-    if &#39;nextPaginationToken&#39; in response:
-        next_pagination_token = response[&#39;nextPaginationToken&#39;]
-    users_list = response[&#39;users&#39;]
-    users: List[User] = []
-    for user in users_list:
-        recipe_id = user[&#39;recipeId&#39;]
-        user_obj = user[&#39;user&#39;]
-        third_party = None
-        if &#39;thirdParty&#39; in user_obj:
-            third_party = ThirdPartyInfo(
-                user_obj[&#39;thirdParty&#39;][&#39;userId&#39;],
-                user_obj[&#39;thirdParty&#39;][&#39;id&#39;]
-            )
-        email = None
-        if &#39;email&#39; in user_obj:
-            email = user_obj[&#39;email&#39;]
-        phone_number = None
-        if &#39;phoneNumber&#39; in user_obj:
-            phone_number = user_obj[&#39;phoneNumber&#39;]
-        users.append(User(
-            recipe_id, user_obj[&#39;id&#39;], user_obj[&#39;timeJoined&#39;], email, phone_number, third_party))
-
-    return UsersResponse(users, next_pagination_token)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.supertokens.Supertokens.handle_supertokens_error"><code class="name flex">
-<span>async def <span class="ident">handle_supertokens_error</span></span>(<span>self, request: BaseRequest, err: Exception, response: BaseResponse)</span>
+<span>async def <span class="ident">handle_supertokens_error</span></span>(<span>self, request: BaseRequest, err: Exception, response: BaseResponse, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def handle_supertokens_error(self, request: BaseRequest, err: Exception, response: BaseResponse):
-    if isinstance(err, GeneralError):
-        raise err
-
-    if isinstance(err, BadInputError):
-        return send_non_200_response(str(err), 400, response)
-
-    for recipe in self.recipe_modules:
-        if recipe.is_error_from_this_recipe_based_on_instance(
-                err) and isinstance(err, SuperTokensError):
-            return await recipe.handle_error(request, err, response)
-    raise err</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.supertokens.Supertokens.middleware"><code class="name flex">
-<span>async def <span class="ident">middleware</span></span>(<span>self, request: BaseRequest, response: BaseResponse) ‑> Union[BaseResponse, None]</span>
+<span>async def <span class="ident">middleware</span></span>(<span>self, request: BaseRequest, response: BaseResponse, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def middleware(self, request: BaseRequest, response: BaseResponse) -&gt; Union[BaseResponse, None]:  # pylint: disable=no-self-use
-    path = Supertokens.get_instance().app_info.api_gateway_path.append(
-        NormalisedURLPath(
-            request.get_path()))
-    method = normalise_http_method(request.method())
-
-    if not path.startswith(
-            Supertokens.get_instance().app_info.api_base_path):
-        return None
-    request_rid = get_rid_from_request(request)
-    if request_rid is not None and request_rid == &#39;anti-csrf&#39;:
-        # see
-        # https://github.com/supertokens/supertokens-python/issues/54
-        request_rid = None
-    request_id = None
-    matched_recipe = None
-    if request_rid is not None:
-        for recipe in Supertokens.get_instance().recipe_modules:
-            if recipe.get_recipe_id() == request_rid:
-                matched_recipe = recipe
-                break
-        if matched_recipe is not None:
-            request_id = matched_recipe.return_api_id_if_can_handle_request(
-                path, method)
-    else:
-        for recipe in Supertokens.get_instance().recipe_modules:
-            request_id = recipe.return_api_id_if_can_handle_request(
-                path, method)
-            if request_id is not None:
-                matched_recipe = recipe
-                break
-    if request_id is not None and matched_recipe is not None:
-        return await matched_recipe.handle_api_request(request_id, request, path, method, response)
-    return None</code></pre>
-</details>
 </dd>
-<dt id="supertokens_python.supertokens.Supertokens.send_telemetry"><code class="name flex">
-<span>async def <span class="ident">send_telemetry</span></span>(<span>self)</span>
+<dt id="supertokens_python.supertokens.Supertokens.update_or_delete_user_id_mapping_info"><code class="name flex">
+<span>async def <span class="ident">update_or_delete_user_id_mapping_info</span></span>(<span>self, user_id: str, user_id_type: Optional[UserIDTypes], external_user_id_info: Optional[str], user_context: Optional[Dict[str, Any]]) ‑> Union[<a title="supertokens_python.interfaces.UpdateOrDeleteUserIdMappingInfoOkResult" href="interfaces.html#supertokens_python.interfaces.UpdateOrDeleteUserIdMappingInfoOkResult">UpdateOrDeleteUserIdMappingInfoOkResult</a>, <a title="supertokens_python.interfaces.UnknownMappingError" href="interfaces.html#supertokens_python.interfaces.UnknownMappingError">UnknownMappingError</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def send_telemetry(self):
-    try:
-        querier = Querier.get_instance(None)
-        response = await querier.send_get_request(NormalisedURLPath(TELEMETRY), {})
-        telemetry_id = None
-        if &#39;exists&#39; in response and response[&#39;exists&#39;] and &#39;telemetry_id&#39; in response:
-            telemetry_id = response[&#39;telemetry_id&#39;]
-        data = {
-            &#39;appName&#39;: self.app_info.app_name,
-            &#39;websiteDomain&#39;: self.app_info.website_domain.get_as_string_dangerous(),
-            &#39;sdk&#39;: &#39;python&#39;
-        }
-        if telemetry_id is not None:
-            data = {
-                **data,
-                &#39;telemetryId&#39;: telemetry_id
-            }
-        async with AsyncClient() as client:
-            await client.post(url=TELEMETRY_SUPERTOKENS_API_URL, json=data,  # type: ignore
-                              headers={&#39;api-version&#39;: TELEMETRY_SUPERTOKENS_API_VERSION})
-    except Exception:
-        pass</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
 <dt id="supertokens_python.supertokens.SupertokensConfig"><code class="flex name class">
 <span>class <span class="ident">SupertokensConfig</span></span>
-<span>(</span><span>connection_uri: str, api_key: Union[str, None] = None)</span>
+<span>(</span><span>connection_uri: str, api_key: Union[str, None] = None, network_interceptor: Optional[Callable[[str, str, Dict[str, Any], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]], Tuple[str, str, Dict[str, Any], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]]] = None, disable_core_call_cache: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -1093,16 +1527,42 @@ def reset():
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class SupertokensConfig:
-    def __init__(self, connection_uri: str, api_key: Union[str, None] = None):  # We keep this = None here because this is directly used by the user.
+    def __init__(
+        self,
+        connection_uri: str,
+        api_key: Union[str, None] = None,
+        network_interceptor: Optional[
+            Callable[
+                [
+                    str,
+                    str,
+                    Dict[str, Any],
+                    Optional[Dict[str, Any]],
+                    Optional[Dict[str, Any]],
+                    Optional[Dict[str, Any]],
+                ],
+                Tuple[
+                    str,
+                    str,
+                    Dict[str, Any],
+                    Optional[Dict[str, Any]],
+                    Optional[Dict[str, Any]],
+                ],
+            ]
+        ] = None,
+        disable_core_call_cache: bool = False,
+    ):  # We keep this = None here because this is directly used by the user.
         self.connection_uri = connection_uri
-        self.api_key = api_key</code></pre>
+        self.api_key = api_key
+        self.network_interceptor = network_interceptor
+        self.disable_core_call_cache = disable_core_call_cache</code></pre>
 </details>
 </dd>
 </dl>
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -1114,13 +1574,19 @@ def reset():
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
-<li><code><a title="supertokens_python.supertokens.manage_cookies_post_response" href="#supertokens_python.supertokens.manage_cookies_post_response">manage_cookies_post_response</a></code></li>
+<li><code><a title="supertokens_python.supertokens.get_request_from_user_context" href="#supertokens_python.supertokens.get_request_from_user_context">get_request_from_user_context</a></code></li>
+<li><code><a title="supertokens_python.supertokens.manage_session_post_response" href="#supertokens_python.supertokens.manage_session_post_response">manage_session_post_response</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
 <li>
 <h4><code><a title="supertokens_python.supertokens.AppInfo" href="#supertokens_python.supertokens.AppInfo">AppInfo</a></code></h4>
+<ul class="">
+<li><code><a title="supertokens_python.supertokens.AppInfo.get_origin" href="#supertokens_python.supertokens.AppInfo.get_origin">get_origin</a></code></li>
+<li><code><a title="supertokens_python.supertokens.AppInfo.get_top_level_website_domain" href="#supertokens_python.supertokens.AppInfo.get_top_level_website_domain">get_top_level_website_domain</a></code></li>
+<li><code><a title="supertokens_python.supertokens.AppInfo.toJSON" href="#supertokens_python.supertokens.AppInfo.toJSON">toJSON</a></code></li>
+</ul>
 </li>
 <li>
 <h4><code><a title="supertokens_python.supertokens.Host" href="#supertokens_python.supertokens.Host">Host</a></code></h4>
@@ -1131,16 +1597,18 @@ def reset():
 <li>
 <h4><code><a title="supertokens_python.supertokens.Supertokens" href="#supertokens_python.supertokens.Supertokens">Supertokens</a></code></h4>
 <ul class="">
-<li><code><a title="supertokens_python.supertokens.Supertokens.delete_user" href="#supertokens_python.supertokens.Supertokens.delete_user">delete_user</a></code></li>
+<li><code><a title="supertokens_python.supertokens.Supertokens.create_user_id_mapping" href="#supertokens_python.supertokens.Supertokens.create_user_id_mapping">create_user_id_mapping</a></code></li>
+<li><code><a title="supertokens_python.supertokens.Supertokens.delete_user_id_mapping" href="#supertokens_python.supertokens.Supertokens.delete_user_id_mapping">delete_user_id_mapping</a></code></li>
 <li><code><a title="supertokens_python.supertokens.Supertokens.get_all_cors_headers" href="#supertokens_python.supertokens.Supertokens.get_all_cors_headers">get_all_cors_headers</a></code></li>
 <li><code><a title="supertokens_python.supertokens.Supertokens.get_instance" href="#supertokens_python.supertokens.Supertokens.get_instance">get_instance</a></code></li>
+<li><code><a title="supertokens_python.supertokens.Supertokens.get_request_from_user_context" href="#supertokens_python.supertokens.Supertokens.get_request_from_user_context">get_request_from_user_context</a></code></li>
 <li><code><a title="supertokens_python.supertokens.Supertokens.get_user_count" href="#supertokens_python.supertokens.Supertokens.get_user_count">get_user_count</a></code></li>
-<li><code><a title="supertokens_python.supertokens.Supertokens.get_users" href="#supertokens_python.supertokens.Supertokens.get_users">get_users</a></code></li>
+<li><code><a title="supertokens_python.supertokens.Supertokens.get_user_id_mapping" href="#supertokens_python.supertokens.Supertokens.get_user_id_mapping">get_user_id_mapping</a></code></li>
 <li><code><a title="supertokens_python.supertokens.Supertokens.handle_supertokens_error" href="#supertokens_python.supertokens.Supertokens.handle_supertokens_error">handle_supertokens_error</a></code></li>
 <li><code><a title="supertokens_python.supertokens.Supertokens.init" href="#supertokens_python.supertokens.Supertokens.init">init</a></code></li>
 <li><code><a title="supertokens_python.supertokens.Supertokens.middleware" href="#supertokens_python.supertokens.Supertokens.middleware">middleware</a></code></li>
 <li><code><a title="supertokens_python.supertokens.Supertokens.reset" href="#supertokens_python.supertokens.Supertokens.reset">reset</a></code></li>
-<li><code><a title="supertokens_python.supertokens.Supertokens.send_telemetry" href="#supertokens_python.supertokens.Supertokens.send_telemetry">send_telemetry</a></code></li>
+<li><code><a title="supertokens_python.supertokens.Supertokens.update_or_delete_user_id_mapping_info" href="#supertokens_python.supertokens.Supertokens.update_or_delete_user_id_mapping_info">update_or_delete_user_id_mapping_info</a></code></li>
 </ul>
 </li>
 <li>
@@ -1152,7 +1620,7 @@ def reset():
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

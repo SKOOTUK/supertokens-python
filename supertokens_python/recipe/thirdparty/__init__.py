@@ -11,24 +11,20 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 from . import exceptions as ex
-from . import providers
+from . import provider, utils
 from .recipe import ThirdPartyRecipe
 
-from . import utils
-InputEmailVerificationConfig = utils.InputEmailVerificationConfig
 InputOverrideConfig = utils.InputOverrideConfig
 SignInAndUpFeature = utils.SignInAndUpFeature
-Apple = providers.Apple
-Discord = providers.Discord
-Facebook = providers.Facebook
-Github = providers.Github
-Google = providers.Google
-GoogleWorkspaces = providers.GoogleWorkspaces
+ProviderInput = provider.ProviderInput
+ProviderConfig = provider.ProviderConfig
+ProviderClientConfig = provider.ProviderClientConfig
 exceptions = ex
 
 if TYPE_CHECKING:
@@ -37,8 +33,10 @@ if TYPE_CHECKING:
     from ...recipe_module import RecipeModule
 
 
-def init(sign_in_and_up_feature: SignInAndUpFeature,
-         email_verification_feature: Union[InputEmailVerificationConfig, None] = None,
-         override: Union[InputOverrideConfig, None] = None) -> Callable[[AppInfo], RecipeModule]:
-    return ThirdPartyRecipe.init(
-        sign_in_and_up_feature, email_verification_feature, override)
+def init(
+    sign_in_and_up_feature: Optional[SignInAndUpFeature] = None,
+    override: Union[InputOverrideConfig, None] = None,
+) -> Callable[[AppInfo], RecipeModule]:
+    if sign_in_and_up_feature is None:
+        sign_in_and_up_feature = SignInAndUpFeature()
+    return ThirdPartyRecipe.init(sign_in_and_up_feature, override)

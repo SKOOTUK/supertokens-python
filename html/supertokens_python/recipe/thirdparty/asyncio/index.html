@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.thirdparty.asyncio API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -40,77 +40,57 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Optional, Union
 
+from supertokens_python.auth_utils import LinkingToSessionUserFailedError
+from supertokens_python.recipe.session import SessionContainer
+from supertokens_python.recipe.thirdparty.interfaces import (
+    EmailChangeNotAllowedError,
+    ManuallyCreateOrUpdateUserOkResult,
+    SignInUpNotAllowed,
+)
 from supertokens_python.recipe.thirdparty.recipe import ThirdPartyRecipe
 
-from ..types import User
 
-
-async def create_email_verification_token(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
+async def manually_create_or_update_user(
+    tenant_id: str,
+    third_party_id: str,
+    third_party_user_id: str,
+    email: str,
+    is_verified: bool,
+    session: Optional[SessionContainer] = None,
+    user_context: Union[None, Dict[str, Any]] = None,
+) -&gt; Union[
+    ManuallyCreateOrUpdateUserOkResult,
+    LinkingToSessionUserFailedError,
+    SignInUpNotAllowed,
+    EmailChangeNotAllowedError,
+]:
     if user_context is None:
         user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.create_email_verification_token(
-        user_id, email, user_context)
+    return await ThirdPartyRecipe.get_instance().recipe_implementation.manually_create_or_update_user(
+        third_party_id=third_party_id,
+        third_party_user_id=third_party_user_id,
+        email=email,
+        is_verified=is_verified,
+        session=session,
+        tenant_id=tenant_id,
+        user_context=user_context,
+        should_try_linking_with_session_user=session is not None,
+    )
 
 
-async def verify_email_using_token(token: str, user_context: Union[None, Dict[str, Any]] = None):
+async def get_provider(
+    tenant_id: str,
+    third_party_id: str,
+    client_type: Optional[str] = None,
+    user_context: Union[None, Dict[str, Any]] = None,
+):
     if user_context is None:
         user_context = {}
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.verify_email_using_token(
-        token, user_context)
-
-
-async def is_email_verified(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.is_email_verified(
-        user_id, email, user_context)
-
-
-async def unverify_email(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.unverify_email(
-        user_id, email, user_context)
-
-
-async def revoke_email_verification_tokens(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.revoke_email_verification_tokens(
-        user_id, email, user_context)
-
-
-async def get_user_by_id(user_id: str, user_context: Union[None, Dict[str, Any]] = None) -&gt; Union[User, None]:
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.get_user_by_id(user_id, user_context)
-
-
-async def get_users_by_email(email: str, user_context: Union[None, Dict[str, Any]] = None) -&gt; List[User]:
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.get_users_by_email(email, user_context)
-
-
-async def get_user_by_third_party_info(third_party_id: str, third_party_user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.get_user_by_thirdparty_info(third_party_id,
-                                                                                                   third_party_user_id,
-                                                                                                   user_context)
-
-
-async def sign_in_up(third_party_id: str, third_party_user_id: str, email: str, email_verified: bool, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.sign_in_up(third_party_id, third_party_user_id,
-                                                                                  email, email_verified, user_context)</code></pre>
+    return await ThirdPartyRecipe.get_instance().recipe_implementation.get_provider(
+        third_party_id, client_type, tenant_id, user_context
+    )</code></pre>
 </details>
 </section>
 <section>
@@ -120,152 +100,17 @@ async def sign_in_up(third_party_id: str, third_party_user_id: str, email: str, 
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.create_email_verification_token"><code class="name flex">
-<span>async def <span class="ident">create_email_verification_token</span></span>(<span>user_id: str, user_context: Optional[None] = None)</span>
+<dt id="supertokens_python.recipe.thirdparty.asyncio.get_provider"><code class="name flex">
+<span>async def <span class="ident">get_provider</span></span>(<span>tenant_id: str, third_party_id: str, client_type: Optional[str] = None, user_context: Optional[Dict[str, Any]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def create_email_verification_token(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.create_email_verification_token(
-        user_id, email, user_context)</code></pre>
-</details>
 </dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.get_user_by_id"><code class="name flex">
-<span>async def <span class="ident">get_user_by_id</span></span>(<span>user_id: str, user_context: Optional[None] = None) ‑> Optional[<a title="supertokens_python.recipe.thirdparty.types.User" href="../types.html#supertokens_python.recipe.thirdparty.types.User">User</a>]</span>
+<dt id="supertokens_python.recipe.thirdparty.asyncio.manually_create_or_update_user"><code class="name flex">
+<span>async def <span class="ident">manually_create_or_update_user</span></span>(<span>tenant_id: str, third_party_id: str, third_party_user_id: str, email: str, is_verified: bool, session: Optional[<a title="supertokens_python.recipe.session.interfaces.SessionContainer" href="../../session/interfaces.html#supertokens_python.recipe.session.interfaces.SessionContainer">SessionContainer</a>] = None, user_context: Optional[Dict[str, Any]] = None) ‑> Union[<a title="supertokens_python.recipe.thirdparty.interfaces.ManuallyCreateOrUpdateUserOkResult" href="../interfaces.html#supertokens_python.recipe.thirdparty.interfaces.ManuallyCreateOrUpdateUserOkResult">ManuallyCreateOrUpdateUserOkResult</a>, <a title="supertokens_python.auth_utils.LinkingToSessionUserFailedError" href="../../../auth_utils.html#supertokens_python.auth_utils.LinkingToSessionUserFailedError">LinkingToSessionUserFailedError</a>, <a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed" href="../interfaces.html#supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed">SignInUpNotAllowed</a>, <a title="supertokens_python.recipe.thirdparty.interfaces.EmailChangeNotAllowedError" href="../interfaces.html#supertokens_python.recipe.thirdparty.interfaces.EmailChangeNotAllowedError">EmailChangeNotAllowedError</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_user_by_id(user_id: str, user_context: Union[None, Dict[str, Any]] = None) -&gt; Union[User, None]:
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.get_user_by_id(user_id, user_context)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.get_user_by_third_party_info"><code class="name flex">
-<span>async def <span class="ident">get_user_by_third_party_info</span></span>(<span>third_party_id: str, third_party_user_id: str, user_context: Optional[None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_user_by_third_party_info(third_party_id: str, third_party_user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.get_user_by_thirdparty_info(third_party_id,
-                                                                                                   third_party_user_id,
-                                                                                                   user_context)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.get_users_by_email"><code class="name flex">
-<span>async def <span class="ident">get_users_by_email</span></span>(<span>email: str, user_context: Optional[None] = None) ‑> List[<a title="supertokens_python.recipe.thirdparty.types.User" href="../types.html#supertokens_python.recipe.thirdparty.types.User">User</a>]</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_users_by_email(email: str, user_context: Union[None, Dict[str, Any]] = None) -&gt; List[User]:
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.get_users_by_email(email, user_context)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.is_email_verified"><code class="name flex">
-<span>async def <span class="ident">is_email_verified</span></span>(<span>user_id: str, user_context: Optional[None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def is_email_verified(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.is_email_verified(
-        user_id, email, user_context)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.revoke_email_verification_tokens"><code class="name flex">
-<span>async def <span class="ident">revoke_email_verification_tokens</span></span>(<span>user_id: str, user_context: Optional[None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def revoke_email_verification_tokens(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.revoke_email_verification_tokens(
-        user_id, email, user_context)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.sign_in_up"><code class="name flex">
-<span>async def <span class="ident">sign_in_up</span></span>(<span>third_party_id: str, third_party_user_id: str, email: str, email_verified: bool, user_context: Optional[None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def sign_in_up(third_party_id: str, third_party_user_id: str, email: str, email_verified: bool, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().recipe_implementation.sign_in_up(third_party_id, third_party_user_id,
-                                                                                  email, email_verified, user_context)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.unverify_email"><code class="name flex">
-<span>async def <span class="ident">unverify_email</span></span>(<span>user_id: str, user_context: Optional[None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def unverify_email(user_id: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    email = await ThirdPartyRecipe.get_instance().get_email_for_user_id(user_id, user_context)
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.unverify_email(
-        user_id, email, user_context)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.asyncio.verify_email_using_token"><code class="name flex">
-<span>async def <span class="ident">verify_email_using_token</span></span>(<span>token: str, user_context: Optional[None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def verify_email_using_token(token: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await ThirdPartyRecipe.get_instance().email_verification_recipe.recipe_implementation.verify_email_using_token(
-        token, user_context)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -273,7 +118,7 @@ async def sign_in_up(third_party_id: str, third_party_user_id: str, email: str, 
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -285,22 +130,15 @@ async def sign_in_up(third_party_id: str, third_party_user_id: str, email: str, 
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.create_email_verification_token" href="#supertokens_python.recipe.thirdparty.asyncio.create_email_verification_token">create_email_verification_token</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.get_user_by_id" href="#supertokens_python.recipe.thirdparty.asyncio.get_user_by_id">get_user_by_id</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.get_user_by_third_party_info" href="#supertokens_python.recipe.thirdparty.asyncio.get_user_by_third_party_info">get_user_by_third_party_info</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.get_users_by_email" href="#supertokens_python.recipe.thirdparty.asyncio.get_users_by_email">get_users_by_email</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.is_email_verified" href="#supertokens_python.recipe.thirdparty.asyncio.is_email_verified">is_email_verified</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.revoke_email_verification_tokens" href="#supertokens_python.recipe.thirdparty.asyncio.revoke_email_verification_tokens">revoke_email_verification_tokens</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.sign_in_up" href="#supertokens_python.recipe.thirdparty.asyncio.sign_in_up">sign_in_up</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.unverify_email" href="#supertokens_python.recipe.thirdparty.asyncio.unverify_email">unverify_email</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.verify_email_using_token" href="#supertokens_python.recipe.thirdparty.asyncio.verify_email_using_token">verify_email_using_token</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.get_provider" href="#supertokens_python.recipe.thirdparty.asyncio.get_provider">get_provider</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.asyncio.manually_create_or_update_user" href="#supertokens_python.recipe.thirdparty.asyncio.manually_create_or_update_user">manually_create_or_update_user</a></code></li>
 </ul>
 </li>
 </ul>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

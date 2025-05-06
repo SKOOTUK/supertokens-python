@@ -13,41 +13,59 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Union
 
 from typing_extensions import Literal
 
 if TYPE_CHECKING:
+    from supertokens_python.supertokens import AppInfo, BaseRequest
+
     from ...recipe_module import RecipeModule
-    from supertokens_python.supertokens import AppInfo
+    from .utils import TokenTransferMethod
 
 from . import exceptions as ex
+from . import interfaces, utils
 from .recipe import SessionRecipe
-from . import utils
-from . import interfaces
 
 InputErrorHandlers = utils.InputErrorHandlers
 InputOverrideConfig = utils.InputOverrideConfig
-JWTConfig = utils.JWTConfig
 SessionContainer = interfaces.SessionContainer
 exceptions = ex
 
 
-def init(cookie_domain: Union[str, None] = None,
-         cookie_secure: Union[bool, None] = None,
-         cookie_same_site: Union[Literal["lax",
-                                         "none", "strict"], None] = None,
-         session_expired_status_code: Union[int, None] = None,
-         anti_csrf: Union[Literal["VIA_TOKEN",
-                                  "VIA_CUSTOM_HEADER", "NONE"], None] = None,
-         error_handlers: Union[InputErrorHandlers, None] = None,
-         override: Union[InputOverrideConfig, None] = None,
-         jwt: Union[JWTConfig, None] = None) -> Callable[[AppInfo], RecipeModule]:
-    return SessionRecipe.init(cookie_domain,
-                              cookie_secure,
-                              cookie_same_site,
-                              session_expired_status_code,
-                              anti_csrf,
-                              error_handlers,
-                              override,
-                              jwt)
+def init(
+    cookie_domain: Union[str, None] = None,
+    older_cookie_domain: Union[str, None] = None,
+    cookie_secure: Union[bool, None] = None,
+    cookie_same_site: Union[Literal["lax", "none", "strict"], None] = None,
+    session_expired_status_code: Union[int, None] = None,
+    anti_csrf: Union[Literal["VIA_TOKEN", "VIA_CUSTOM_HEADER", "NONE"], None] = None,
+    get_token_transfer_method: Union[
+        Callable[
+            [BaseRequest, bool, Dict[str, Any]],
+            Union[TokenTransferMethod, Literal["any"]],
+        ],
+        None,
+    ] = None,
+    error_handlers: Union[InputErrorHandlers, None] = None,
+    override: Union[InputOverrideConfig, None] = None,
+    invalid_claim_status_code: Union[int, None] = None,
+    use_dynamic_access_token_signing_key: Union[bool, None] = None,
+    expose_access_token_to_frontend_in_cookie_based_auth: Union[bool, None] = None,
+    jwks_refresh_interval_sec: Union[int, None] = None,
+) -> Callable[[AppInfo], RecipeModule]:
+    return SessionRecipe.init(
+        cookie_domain,
+        older_cookie_domain,
+        cookie_secure,
+        cookie_same_site,
+        session_expired_status_code,
+        anti_csrf,
+        get_token_transfer_method,
+        error_handlers,
+        override,
+        invalid_claim_status_code,
+        use_dynamic_access_token_signing_key,
+        expose_access_token_to_frontend_in_cookie_based_auth,
+        jwks_refresh_interval_sec,
+    )

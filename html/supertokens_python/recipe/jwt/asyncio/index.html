@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.jwt.asyncio API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -39,23 +39,33 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
-from supertokens_python.recipe.jwt.interfaces import (CreateJwtResult,
-                                                      GetJWKSResult)
+from supertokens_python.recipe.jwt.interfaces import (
+    CreateJwtOkResult,
+    CreateJwtResultUnsupportedAlgorithm,
+    GetJWKSResult,
+)
 from supertokens_python.recipe.jwt.recipe import JWTRecipe
 
 
-async def create_jwt(payload: Union[None, Dict[str, Any]] = None, validity_seconds: Union[None, int] = None, user_context: Union[Dict[str, Any], None] = None) -&gt; CreateJwtResult:
+async def create_jwt(
+    payload: Optional[Dict[str, Any]] = None,
+    validity_seconds: Optional[int] = None,
+    use_static_signing_key: Optional[bool] = None,
+    user_context: Optional[Dict[str, Any]] = None,
+) -&gt; Union[CreateJwtOkResult, CreateJwtResultUnsupportedAlgorithm]:
     if user_context is None:
         user_context = {}
     if payload is None:
         payload = {}
 
-    return await JWTRecipe.get_instance().recipe_implementation.create_jwt(payload, validity_seconds, user_context)
+    return await JWTRecipe.get_instance().recipe_implementation.create_jwt(
+        payload, validity_seconds, use_static_signing_key, user_context
+    )
 
 
-async def get_jwks(user_context: Union[Dict[str, Any], None] = None) -&gt; GetJWKSResult:
+async def get_jwks(user_context: Optional[Dict[str, Any]] = None) -&gt; GetJWKSResult:
     if user_context is None:
         user_context = {}
     return await JWTRecipe.get_instance().recipe_implementation.get_jwks(user_context)</code></pre>
@@ -69,37 +79,16 @@ async def get_jwks(user_context: Union[Dict[str, Any], None] = None) -&gt; GetJW
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="supertokens_python.recipe.jwt.asyncio.create_jwt"><code class="name flex">
-<span>async def <span class="ident">create_jwt</span></span>(<span>payload: Optional[None] = None, validity_seconds: Optional[int] = None, user_context: Optional[None] = None) ‑> <a title="supertokens_python.recipe.jwt.interfaces.CreateJwtResult" href="../interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtResult">CreateJwtResult</a></span>
+<span>async def <span class="ident">create_jwt</span></span>(<span>payload: Optional[Dict[str, Any]] = None, validity_seconds: Optional[int] = None, use_static_signing_key: Optional[bool] = None, user_context: Optional[Dict[str, Any]] = None) ‑> Union[<a title="supertokens_python.recipe.jwt.interfaces.CreateJwtOkResult" href="../interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtOkResult">CreateJwtOkResult</a>, <a title="supertokens_python.recipe.jwt.interfaces.CreateJwtResultUnsupportedAlgorithm" href="../interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtResultUnsupportedAlgorithm">CreateJwtResultUnsupportedAlgorithm</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def create_jwt(payload: Union[None, Dict[str, Any]] = None, validity_seconds: Union[None, int] = None, user_context: Union[Dict[str, Any], None] = None) -&gt; CreateJwtResult:
-    if user_context is None:
-        user_context = {}
-    if payload is None:
-        payload = {}
-
-    return await JWTRecipe.get_instance().recipe_implementation.create_jwt(payload, validity_seconds, user_context)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.jwt.asyncio.get_jwks"><code class="name flex">
-<span>async def <span class="ident">get_jwks</span></span>(<span>user_context: Optional[None] = None) ‑> <a title="supertokens_python.recipe.jwt.interfaces.GetJWKSResult" href="../interfaces.html#supertokens_python.recipe.jwt.interfaces.GetJWKSResult">GetJWKSResult</a></span>
+<span>async def <span class="ident">get_jwks</span></span>(<span>user_context: Optional[Dict[str, Any]] = None) ‑> <a title="supertokens_python.recipe.jwt.interfaces.GetJWKSResult" href="../interfaces.html#supertokens_python.recipe.jwt.interfaces.GetJWKSResult">GetJWKSResult</a></span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_jwks(user_context: Union[Dict[str, Any], None] = None) -&gt; GetJWKSResult:
-    if user_context is None:
-        user_context = {}
-    return await JWTRecipe.get_instance().recipe_implementation.get_jwks(user_context)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -107,7 +96,7 @@ async def get_jwks(user_context: Union[Dict[str, Any], None] = None) -&gt; GetJW
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -127,7 +116,7 @@ async def get_jwks(user_context: Union[Dict[str, Any], None] = None) -&gt; GetJW
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

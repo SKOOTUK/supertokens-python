@@ -13,11 +13,22 @@
 # under the License.
 from typing import Any, Dict
 
-from supertokens_python.recipe.jwt.interfaces import (APIInterface, APIOptions,
-                                                      JWKSGetResponse)
+from supertokens_python.recipe.jwt.interfaces import (
+    APIInterface,
+    APIOptions,
+    JWKSGetResponse,
+)
 
 
 class APIImplementation(APIInterface):
-    async def jwks_get(self, api_options: APIOptions, user_context: Dict[str, Any]) -> JWKSGetResponse:
+    async def jwks_get(
+        self, api_options: APIOptions, user_context: Dict[str, Any]
+    ) -> JWKSGetResponse:
         response = await api_options.recipe_implementation.get_jwks(user_context)
-        return JWKSGetResponse('OK', response.keys)
+
+        if response.validity_in_secs is not None:
+            api_options.response.set_header(
+                "Cache-Control", f"max-age={response.validity_in_secs}, must-revalidate"
+            )
+
+        return JWKSGetResponse(response.keys)

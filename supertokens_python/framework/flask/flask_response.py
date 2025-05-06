@@ -12,10 +12,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 import json
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional
 
 from supertokens_python.framework.response import BaseResponse
-from werkzeug.http import dump_cookie
 
 
 class FlaskResponse(BaseResponse):
@@ -24,6 +23,7 @@ class FlaskResponse(BaseResponse):
     def __init__(self, response: Response):
         super().__init__({})
         self.response = response
+        self.original = response
         self.headers: List[Any] = []
         self.response_sent = False
         self.status_set = False
@@ -31,62 +31,52 @@ class FlaskResponse(BaseResponse):
     def set_html_content(self, content: str):
         if not self.response_sent:
             self.response.data = content
-            self.set_header('Content-Type', 'text/html')
+            self.set_header("Content-Type", "text/html")
             self.response_sent = True
 
-    def set_cookie(self, key: str, value: str, expires: int, path: str = "/",
-                   domain: Union[str, None] = None, secure: bool = False, httponly: bool = False, samesite: str = "lax"):
-        if self.response is None:
-            cookie = dump_cookie(
-                key,
-                value=value,
-                expires=int(expires / 1000),
-                path=path,
-                domain=domain,
-                secure=secure,
-                httponly=httponly,
-                samesite=samesite
-            )
-            self.headers.append(("Set-Cookie", cookie))
-        else:
-            self.response.set_cookie(key, value=value, expires=expires / 1000,
-                                     path=path, domain=domain, secure=secure, httponly=httponly, samesite=samesite)
+    def set_cookie(
+        self,
+        key: str,
+        value: str,
+        expires: int,
+        path: str = "/",
+        domain: Optional[str] = None,
+        secure: bool = False,
+        httponly: bool = False,
+        samesite: str = "lax",
+    ):
+        self.response.set_cookie(
+            key,
+            value=value,
+            expires=expires / 1000,
+            path=path,
+            domain=domain,
+            secure=secure,
+            httponly=httponly,
+            samesite=samesite,
+        )
 
     def set_header(self, key: str, value: str):
-        if self.response is None:
-            # TODO in the future the headrs must be validated..
-            # if not isinstance(value, str):
-            #     raise TypeError("Value should be unicode.")
-            if "\n" in value or "\r" in value:
-                raise ValueError(
-                    "Detected newline in header value.  This is "
-                    "a potential security problem"
-                )
-            self.headers.append((key, value))
-        else:
-            self.response.headers.add(key, value)
+        self.response.headers.set(key, value)
 
-    def get_header(self, key: str) -> Union[None, str]:
-        if self.response is not None:
-            return self.response.headers.get(key)
-        for value in self.headers:
-            if value[0] == key:
-                return value[1]
-        return None
+    def get_header(self, key: str) -> Optional[str]:
+        return self.response.headers.get(key)
+
+    def remove_header(self, key: str):
+        del self.response.headers[key]
 
     def set_status_code(self, status_code: int):
         if not self.status_set:
             self.response.status_code = status_code
+            self.status_code = status_code
             self.status_set = True
 
     def get_headers(self):
-        if self.response is None:
-            return self.headers
         return self.response.headers
 
     def set_json_content(self, content: Dict[str, Any]):
         if not self.response_sent:
-            self.set_header('Content-Type', 'application/json; charset=utf-8')
+            self.set_header("Content-Type", "application/json; charset=utf-8")
             self.response.data = json.dumps(
                 content,
                 ensure_ascii=False,
@@ -95,3 +85,10 @@ class FlaskResponse(BaseResponse):
                 separators=(",", ":"),
             ).encode("utf-8")
             self.response_sent = True
+
+    def redirect(self, url: str) -> BaseResponse:
+        self.set_header("Location", url)
+        self.set_status_code(302)
+        self.response.data = b""
+        self.response_sent = True
+        return self

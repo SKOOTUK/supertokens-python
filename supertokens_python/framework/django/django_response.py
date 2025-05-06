@@ -14,7 +14,7 @@
 import json
 from datetime import datetime
 from math import ceil
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional
 
 from supertokens_python.framework.response import BaseResponse
 
@@ -33,44 +33,53 @@ class DjangoResponse(BaseResponse):
     def set_html_content(self, content: str):
         if not self.response_sent:
             self.response.content = content
-            self.set_header('Content-Type', 'text/html')
+            self.set_header("Content-Type", "text/html")
             self.response_sent = True
 
-    def set_cookie(self, key: str,
-                   value: str,
-                   expires: int,
-                   path: str = "/",
-                   domain: Union[str, None] = None,
-                   secure: bool = False,
-                   httponly: bool = False,
-                   samesite: str = "lax"):
+    def set_cookie(
+        self,
+        key: str,
+        value: str,
+        expires: int,
+        path: str = "/",
+        domain: Optional[str] = None,
+        secure: bool = False,
+        httponly: bool = False,
+        samesite: str = "lax",
+    ):
         self.response.set_cookie(
             key=key,
             value=value,
-            expires=datetime.fromtimestamp(
-                ceil(expires / 1000)).strftime("%A, %B %d, %Y %H:%M:%S"),
+            expires=datetime.fromtimestamp(ceil(expires / 1000)).strftime(
+                "%a, %d %b %Y %H:%M:%S UTC"
+            ),
             path=path,
             domain=domain,
             secure=secure,
-            httponly=httponly)
-        self.response.cookies[key]['samesite'] = samesite
+            httponly=httponly,
+        )
+        self.response.cookies[key]["samesite"] = samesite
 
     def set_status_code(self, status_code: int):
         if not self.status_set:
             self.response.status_code = status_code
+            self.status_code = status_code
             self.status_set = True
 
     def set_header(self, key: str, value: str):
         self.response[key] = value
 
-    def get_header(self, key: str):
+    def get_header(self, key: str) -> Optional[str]:
         if self.response.has_header(key):
             return self.response[key]
         return None
 
+    def remove_header(self, key: str):
+        del self.response[key]
+
     def set_json_content(self, content: Dict[str, Any]):
         if not self.response_sent:
-            self.set_header('Content-Type', 'application/json; charset=utf-8')
+            self.set_header("Content-Type", "application/json; charset=utf-8")
             self.response.content = json.dumps(
                 content,
                 ensure_ascii=False,
@@ -79,3 +88,10 @@ class DjangoResponse(BaseResponse):
                 separators=(",", ":"),
             ).encode("utf-8")
             self.response_sent = True
+
+    def redirect(self, url: str) -> BaseResponse:
+        if not self.response_sent:
+            self.set_header("Location", url)
+            self.set_status_code(302)
+            self.response_sent = True
+        return self

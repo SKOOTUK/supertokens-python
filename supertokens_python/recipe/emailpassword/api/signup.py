@@ -13,27 +13,97 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict
+
+from supertokens_python.auth_utils import load_session_in_auth_api_if_needed
+from supertokens_python.recipe.emailpassword.interfaces import (
+    EmailAlreadyExistsError,
+    SignUpPostOkResult,
+)
+from supertokens_python.types import GeneralErrorResponse
+
+from ..exceptions import raise_form_field_exception
+from ..types import ErrorFormField
 
 if TYPE_CHECKING:
-    from supertokens_python.recipe.emailpassword.interfaces import APIOptions, APIInterface
+    from supertokens_python.recipe.emailpassword.interfaces import (
+        APIInterface,
+        APIOptions,
+    )
 
 from supertokens_python.exceptions import raise_bad_input_exception
+from supertokens_python.utils import (
+    get_backwards_compatible_user_info,
+    get_normalised_should_try_linking_with_session_user_flag,
+    send_200_response,
+)
 
 from .utils import validate_form_fields_or_throw_error
 
 
-async def handle_sign_up_api(api_implementation: APIInterface, api_options: APIOptions):
+async def handle_sign_up_api(
+    tenant_id: str,
+    api_implementation: APIInterface,
+    api_options: APIOptions,
+    user_context: Dict[str, Any],
+):
     if api_implementation.disable_sign_up_post:
         return None
     body = await api_options.request.json()
     if body is None:
-        raise_bad_input_exception('Please provide a JSON body')
-    form_fields_raw: Any = body['formFields'] if 'formFields' in body else []
-    form_fields = await validate_form_fields_or_throw_error(api_options.config.sign_up_feature.form_fields,
-                                                            form_fields_raw)
-    response = await api_implementation.sign_up_post(form_fields, api_options, {})
+        raise_bad_input_exception("Please provide a JSON body")
+    form_fields_raw: Any = body["formFields"] if "formFields" in body else []
+    form_fields = await validate_form_fields_or_throw_error(
+        api_options.config.sign_up_feature.form_fields, form_fields_raw, tenant_id
+    )
 
-    api_options.response.set_json_content(response.to_json())
+    should_try_linking_with_session_user = (
+        get_normalised_should_try_linking_with_session_user_flag(
+            api_options.request, body
+        )
+    )
 
-    return api_options.response
+    session = await load_session_in_auth_api_if_needed(
+        api_options.request, should_try_linking_with_session_user, user_context
+    )
+
+    if session is not None:
+        tenant_id = session.get_tenant_id()
+
+    response = await api_implementation.sign_up_post(
+        form_fields,
+        tenant_id,
+        session,
+        should_try_linking_with_session_user,
+        api_options,
+        user_context,
+    )
+
+    if isinstance(response, SignUpPostOkResult):
+        return send_200_response(
+            {
+                "status": "OK",
+                **get_backwards_compatible_user_info(
+                    req=api_options.request,
+                    user_info=response.user,
+                    session_container=response.session,
+                    created_new_recipe_user=None,
+                    user_context=user_context,
+                ),
+            },
+            api_options.response,
+        )
+    if isinstance(response, GeneralErrorResponse):
+        return send_200_response(response.to_json(), api_options.response)
+
+    if isinstance(response, EmailAlreadyExistsError):
+        return raise_form_field_exception(
+            "EMAIL_ALREADY_EXISTS_ERROR",
+            [
+                ErrorFormField(
+                    id="email",
+                    error="This email already exists. Please sign in instead.",
+                )
+            ],
+        )
+    return send_200_response(response.to_json(), api_options.response)

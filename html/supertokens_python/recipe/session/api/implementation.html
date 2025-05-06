@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.session.api.implementation API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,49 +41,90 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 from supertokens_python.normalised_url_path import NormalisedURLPath
-from supertokens_python.recipe.session.interfaces import (APIInterface,
-                                                          SignOutOkayResponse)
+from supertokens_python.recipe.session.interfaces import (
+    APIInterface,
+    SessionClaimValidator,
+    SignOutOkayResponse,
+)
+from supertokens_python.types import MaybeAwaitable
 from supertokens_python.utils import normalise_http_method
 
 if TYPE_CHECKING:
-    from supertokens_python.recipe.session.interfaces import APIOptions, SignOutResponse
+    from supertokens_python.recipe.session.interfaces import APIOptions
+
     from ..interfaces import SessionContainer
 
 from typing import Any, Dict
 
-from supertokens_python.recipe.session.exceptions import UnauthorisedError
+from ..session_request_functions import (
+    get_session_from_request,
+    refresh_session_in_request,
+)
 
 
 class APIImplementation(APIInterface):
+    async def refresh_post(
+        self, api_options: APIOptions, user_context: Dict[str, Any]
+    ) -&gt; SessionContainer:
+        return await refresh_session_in_request(
+            api_options.request,
+            user_context,
+            api_options.config,
+            api_options.recipe_implementation,
+        )
 
-    async def refresh_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; None:
-        await api_options.recipe_implementation.refresh_session(api_options.request, user_context)
-
-    async def signout_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; SignOutResponse:
-        try:
-            session = await api_options.recipe_implementation.get_session(request=api_options.request, user_context=user_context, anti_csrf_check=None, session_required=True)
-        except UnauthorisedError:
-            return SignOutOkayResponse()
-
-        if session is None:
-            raise Exception(&#39;Session is undefined. Should not come here.&#39;)
+    async def signout_post(
+        self,
+        session: SessionContainer,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; SignOutOkayResponse:
         await session.revoke_session(user_context)
         return SignOutOkayResponse()
 
-    async def verify_session(self, api_options: APIOptions,
-                             anti_csrf_check: Union[bool, None],
-                             session_required: bool, user_context: Dict[str, Any]) -&gt; Union[SessionContainer, None]:
+    async def verify_session(
+        self,
+        api_options: APIOptions,
+        anti_csrf_check: Union[bool, None],
+        session_required: bool,
+        check_database: bool,
+        override_global_claim_validators: Optional[
+            Callable[
+                [List[SessionClaimValidator], SessionContainer, Dict[str, Any]],
+                MaybeAwaitable[List[SessionClaimValidator]],
+            ]
+        ],
+        user_context: Dict[str, Any],
+    ) -&gt; Union[SessionContainer, None]:
         method = normalise_http_method(api_options.request.method())
-        if method in (&#39;options&#39;, &#39;trace&#39;):
+        if method in (&#34;options&#34;, &#34;trace&#34;):
+            if session_required:
+                raise Exception(f&#34;verify_session cannot be used with {method} method&#34;)
             return None
         incoming_path = NormalisedURLPath(api_options.request.get_path())
         refresh_token_path = api_options.config.refresh_token_path
-        if incoming_path.equals(refresh_token_path) and method == &#39;post&#39;:
-            return await api_options.recipe_implementation.refresh_session(api_options.request, user_context)
-        return await api_options.recipe_implementation.get_session(api_options.request, anti_csrf_check, session_required, user_context)</code></pre>
+
+        if incoming_path.equals(refresh_token_path) and method == &#34;post&#34;:
+            return await refresh_session_in_request(
+                api_options.request,
+                user_context,
+                api_options.config,
+                api_options.recipe_implementation,
+            )
+
+        return await get_session_from_request(
+            api_options.request,
+            api_options.config,
+            api_options.recipe_implementation,
+            session_required=session_required,
+            anti_csrf_check=anti_csrf_check,
+            check_database=check_database,
+            override_global_claim_validators=override_global_claim_validators,
+            user_context=user_context,
+        )</code></pre>
 </details>
 </section>
 <section>
@@ -106,32 +147,65 @@ inheritance.</p></div>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class APIImplementation(APIInterface):
+    async def refresh_post(
+        self, api_options: APIOptions, user_context: Dict[str, Any]
+    ) -&gt; SessionContainer:
+        return await refresh_session_in_request(
+            api_options.request,
+            user_context,
+            api_options.config,
+            api_options.recipe_implementation,
+        )
 
-    async def refresh_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; None:
-        await api_options.recipe_implementation.refresh_session(api_options.request, user_context)
-
-    async def signout_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; SignOutResponse:
-        try:
-            session = await api_options.recipe_implementation.get_session(request=api_options.request, user_context=user_context, anti_csrf_check=None, session_required=True)
-        except UnauthorisedError:
-            return SignOutOkayResponse()
-
-        if session is None:
-            raise Exception(&#39;Session is undefined. Should not come here.&#39;)
+    async def signout_post(
+        self,
+        session: SessionContainer,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; SignOutOkayResponse:
         await session.revoke_session(user_context)
         return SignOutOkayResponse()
 
-    async def verify_session(self, api_options: APIOptions,
-                             anti_csrf_check: Union[bool, None],
-                             session_required: bool, user_context: Dict[str, Any]) -&gt; Union[SessionContainer, None]:
+    async def verify_session(
+        self,
+        api_options: APIOptions,
+        anti_csrf_check: Union[bool, None],
+        session_required: bool,
+        check_database: bool,
+        override_global_claim_validators: Optional[
+            Callable[
+                [List[SessionClaimValidator], SessionContainer, Dict[str, Any]],
+                MaybeAwaitable[List[SessionClaimValidator]],
+            ]
+        ],
+        user_context: Dict[str, Any],
+    ) -&gt; Union[SessionContainer, None]:
         method = normalise_http_method(api_options.request.method())
-        if method in (&#39;options&#39;, &#39;trace&#39;):
+        if method in (&#34;options&#34;, &#34;trace&#34;):
+            if session_required:
+                raise Exception(f&#34;verify_session cannot be used with {method} method&#34;)
             return None
         incoming_path = NormalisedURLPath(api_options.request.get_path())
         refresh_token_path = api_options.config.refresh_token_path
-        if incoming_path.equals(refresh_token_path) and method == &#39;post&#39;:
-            return await api_options.recipe_implementation.refresh_session(api_options.request, user_context)
-        return await api_options.recipe_implementation.get_session(api_options.request, anti_csrf_check, session_required, user_context)</code></pre>
+
+        if incoming_path.equals(refresh_token_path) and method == &#34;post&#34;:
+            return await refresh_session_in_request(
+                api_options.request,
+                user_context,
+                api_options.config,
+                api_options.recipe_implementation,
+            )
+
+        return await get_session_from_request(
+            api_options.request,
+            api_options.config,
+            api_options.recipe_implementation,
+            session_required=session_required,
+            anti_csrf_check=anti_csrf_check,
+            check_database=check_database,
+            override_global_claim_validators=override_global_claim_validators,
+            user_context=user_context,
+        )</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -141,60 +215,22 @@ inheritance.</p></div>
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.session.api.implementation.APIImplementation.refresh_post"><code class="name flex">
-<span>async def <span class="ident">refresh_post</span></span>(<span>self, api_options: APIOptions, user_context: Dict[str, Any]) ‑> None</span>
+<span>async def <span class="ident">refresh_post</span></span>(<span>self, api_options: APIOptions, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def refresh_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; None:
-    await api_options.recipe_implementation.refresh_session(api_options.request, user_context)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.session.api.implementation.APIImplementation.signout_post"><code class="name flex">
-<span>async def <span class="ident">signout_post</span></span>(<span>self, api_options: APIOptions, user_context: Dict[str, Any]) ‑> SignOutResponse</span>
+<span>async def <span class="ident">signout_post</span></span>(<span>self, session: SessionContainer, api_options: APIOptions, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def signout_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; SignOutResponse:
-    try:
-        session = await api_options.recipe_implementation.get_session(request=api_options.request, user_context=user_context, anti_csrf_check=None, session_required=True)
-    except UnauthorisedError:
-        return SignOutOkayResponse()
-
-    if session is None:
-        raise Exception(&#39;Session is undefined. Should not come here.&#39;)
-    await session.revoke_session(user_context)
-    return SignOutOkayResponse()</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.session.api.implementation.APIImplementation.verify_session"><code class="name flex">
-<span>async def <span class="ident">verify_session</span></span>(<span>self, api_options: APIOptions, anti_csrf_check: Union[bool, None], session_required: bool, user_context: Dict[str, Any]) ‑> Union[SessionContainer, None]</span>
+<span>async def <span class="ident">verify_session</span></span>(<span>self, api_options: APIOptions, anti_csrf_check: Union[bool, None], session_required: bool, check_database: bool, override_global_claim_validators: Optional[Callable[[List[SessionClaimValidator], SessionContainer, Dict[str, Any]], MaybeAwaitable[List[SessionClaimValidator]]]], user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def verify_session(self, api_options: APIOptions,
-                         anti_csrf_check: Union[bool, None],
-                         session_required: bool, user_context: Dict[str, Any]) -&gt; Union[SessionContainer, None]:
-    method = normalise_http_method(api_options.request.method())
-    if method in (&#39;options&#39;, &#39;trace&#39;):
-        return None
-    incoming_path = NormalisedURLPath(api_options.request.get_path())
-    refresh_token_path = api_options.config.refresh_token_path
-    if incoming_path.equals(refresh_token_path) and method == &#39;post&#39;:
-        return await api_options.recipe_implementation.refresh_session(api_options.request, user_context)
-    return await api_options.recipe_implementation.get_session(api_options.request, anti_csrf_check, session_required, user_context)</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
@@ -202,7 +238,7 @@ inheritance.</p></div>
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -228,7 +264,7 @@ inheritance.</p></div>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

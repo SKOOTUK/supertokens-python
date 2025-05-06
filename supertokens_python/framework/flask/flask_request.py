@@ -18,18 +18,24 @@ from typing import TYPE_CHECKING, Any, Dict, Union
 from supertokens_python.framework.request import BaseRequest
 
 if TYPE_CHECKING:
+    from flask.wrappers import Request
+
     from supertokens_python.recipe.session.interfaces import SessionContainer
 
 
 class FlaskRequest(BaseRequest):
-    from flask.wrappers import Request
-
     def __init__(self, req: Request):
         super().__init__()
         self.request = req
 
+    def get_original_url(self) -> str:
+        return self.request.url
+
     def get_query_param(self, key: str, default: Union[str, None] = None):
         return self.request.args.get(key, default)
+
+    def get_query_params(self) -> Dict[str, Any]:
+        return self.request.args.to_dict()
 
     async def json(self) -> Union[Any, None]:
         try:
@@ -39,8 +45,7 @@ class FlaskRequest(BaseRequest):
 
     def method(self) -> str:
         if isinstance(self.request, dict):
-            temp: str = self.request['REQUEST_METHOD']
-            return temp
+            return str(self.request["REQUEST_METHOD"])  # type: ignore
         return self.request.method  # type: ignore
 
     def get_cookie(self, key: str) -> Union[str, None]:
@@ -53,18 +58,27 @@ class FlaskRequest(BaseRequest):
 
     def get_session(self) -> Union[SessionContainer, None]:
         from flask import g
-        if hasattr(g, 'supertokens'):
+
+        if hasattr(g, "supertokens"):
             return g.supertokens
         return None
 
     def set_session(self, session: SessionContainer):
         from flask import g
+
         g.supertokens = session
+
+    def set_session_as_none(self):
+        from flask import g
+
+        g.supertokens = None
 
     def get_path(self) -> str:
         if isinstance(self.request, dict):
-            temp: str = self.request['PATH_INFO']
-            return temp
+            if not isinstance(self.request["PATH_INFO"], str):
+                raise Exception("should never happen")
+
+            return str(self.request["PATH_INFO"])  # type: ignore
         return self.request.base_url
 
     async def form_data(self) -> Dict[str, Any]:

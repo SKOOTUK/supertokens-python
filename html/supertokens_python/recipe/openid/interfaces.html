@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.openid.interfaces API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -40,23 +40,62 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Optional, Union
+
+from supertokens_python.framework import BaseRequest, BaseResponse
+from supertokens_python.recipe.jwt.interfaces import (
+    CreateJwtOkResult,
+    CreateJwtResultUnsupportedAlgorithm,
+    GetJWKSResult,
+)
+from supertokens_python.types import APIResponse, GeneralErrorResponse
 
 from .utils import OpenIdConfig
 
-from typing_extensions import Literal
 
-from supertokens_python.framework import BaseRequest, BaseResponse
-from supertokens_python.recipe.jwt.interfaces import (CreateJwtResult,
-                                                      GetJWKSResult)
-
-
-class GetOpenIdDiscoveryConfigurationResult(ABC):
+class GetOpenIdDiscoveryConfigurationResult:
     def __init__(
-            self, status: Literal[&#39;OK&#39;], issuer: str, jwks_uri: str):
-        self.status = status
+        self,
+        issuer: str,
+        jwks_uri: str,
+        authorization_endpoint: str,
+        token_endpoint: str,
+        userinfo_endpoint: str,
+        revocation_endpoint: str,
+        token_introspection_endpoint: str,
+        end_session_endpoint: str,
+        subject_types_supported: List[str],
+        id_token_signing_alg_values_supported: List[str],
+        response_types_supported: List[str],
+    ):
         self.issuer = issuer
         self.jwks_uri = jwks_uri
+        self.authorization_endpoint = authorization_endpoint
+        self.token_endpoint = token_endpoint
+        self.userinfo_endpoint = userinfo_endpoint
+        self.revocation_endpoint = revocation_endpoint
+        self.token_introspection_endpoint = token_introspection_endpoint
+        self.end_session_endpoint = end_session_endpoint
+        self.subject_types_supported = subject_types_supported
+        self.id_token_signing_alg_values_supported = (
+            id_token_signing_alg_values_supported
+        )
+        self.response_types_supported = response_types_supported
+
+    def to_json(self) -&gt; Dict[str, Any]:
+        return {
+            &#34;issuer&#34;: self.issuer,
+            &#34;jwks_uri&#34;: self.jwks_uri,
+            &#34;authorization_endpoint&#34;: self.authorization_endpoint,
+            &#34;token_endpoint&#34;: self.token_endpoint,
+            &#34;userinfo_endpoint&#34;: self.userinfo_endpoint,
+            &#34;revocation_endpoint&#34;: self.revocation_endpoint,
+            &#34;token_introspection_endpoint&#34;: self.token_introspection_endpoint,
+            &#34;end_session_endpoint&#34;: self.end_session_endpoint,
+            &#34;subject_types_supported&#34;: self.subject_types_supported,
+            &#34;id_token_signing_alg_values_supported&#34;: self.id_token_signing_alg_values_supported,
+            &#34;response_types_supported&#34;: self.response_types_supported,
+        }
 
 
 class RecipeInterface(ABC):
@@ -64,7 +103,13 @@ class RecipeInterface(ABC):
         pass
 
     @abstractmethod
-    async def create_jwt(self, payload: Dict[str, Any], validity_seconds: Union[int, None], user_context: Dict[str, Any]) -&gt; CreateJwtResult:
+    async def create_jwt(
+        self,
+        payload: Dict[str, Any],
+        validity_seconds: Optional[int],
+        use_static_signing_key: Optional[bool],
+        user_context: Dict[str, Any],
+    ) -&gt; Union[CreateJwtOkResult, CreateJwtResultUnsupportedAlgorithm]:
         pass
 
     @abstractmethod
@@ -72,13 +117,21 @@ class RecipeInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_open_id_discovery_configuration(self, user_context: Dict[str, Any]) -&gt; GetOpenIdDiscoveryConfigurationResult:
+    async def get_open_id_discovery_configuration(
+        self, user_context: Dict[str, Any]
+    ) -&gt; GetOpenIdDiscoveryConfigurationResult:
         pass
 
 
 class APIOptions:
-    def __init__(self, request: BaseRequest, response: BaseResponse, recipe_id: str,
-                 config: OpenIdConfig, recipe_implementation: RecipeInterface):
+    def __init__(
+        self,
+        request: BaseRequest,
+        response: BaseResponse,
+        recipe_id: str,
+        config: OpenIdConfig,
+        recipe_implementation: RecipeInterface,
+    ):
         self.request = request
         self.response = response
         self.recipe_id = recipe_id
@@ -86,18 +139,51 @@ class APIOptions:
         self.recipe_implementation = recipe_implementation
 
 
-class OpenIdDiscoveryConfigurationGetResponse:
+class OpenIdDiscoveryConfigurationGetResponse(APIResponse):
+    status: str = &#34;OK&#34;
+
     def __init__(
-            self, status: Literal[&#39;OK&#39;], issuer: str, jwks_uri: str):
-        self.status = status
+        self,
+        issuer: str,
+        jwks_uri: str,
+        authorization_endpoint: str,
+        token_endpoint: str,
+        userinfo_endpoint: str,
+        revocation_endpoint: str,
+        token_introspection_endpoint: str,
+        end_session_endpoint: str,
+        subject_types_supported: List[str],
+        id_token_signing_alg_values_supported: List[str],
+        response_types_supported: List[str],
+    ):
         self.issuer = issuer
         self.jwks_uri = jwks_uri
+        self.authorization_endpoint = authorization_endpoint
+        self.token_endpoint = token_endpoint
+        self.userinfo_endpoint = userinfo_endpoint
+        self.revocation_endpoint = revocation_endpoint
+        self.token_introspection_endpoint = token_introspection_endpoint
+        self.end_session_endpoint = end_session_endpoint
+        self.subject_types_supported = subject_types_supported
+        self.id_token_signing_alg_values_supported = (
+            id_token_signing_alg_values_supported
+        )
+        self.response_types_supported = response_types_supported
 
     def to_json(self):
         return {
-            &#39;status&#39;: self.status,
-            &#39;issuer&#39;: self.issuer,
-            &#39;jwks_uri&#39;: self.jwks_uri
+            &#34;status&#34;: self.status,
+            &#34;issuer&#34;: self.issuer,
+            &#34;jwks_uri&#34;: self.jwks_uri,
+            &#34;authorization_endpoint&#34;: self.authorization_endpoint,
+            &#34;token_endpoint&#34;: self.token_endpoint,
+            &#34;userinfo_endpoint&#34;: self.userinfo_endpoint,
+            &#34;revocation_endpoint&#34;: self.revocation_endpoint,
+            &#34;token_introspection_endpoint&#34;: self.token_introspection_endpoint,
+            &#34;end_session_endpoint&#34;: self.end_session_endpoint,
+            &#34;subject_types_supported&#34;: self.subject_types_supported,
+            &#34;id_token_signing_alg_values_supported&#34;: self.id_token_signing_alg_values_supported,
+            &#34;response_types_supported&#34;: self.response_types_supported,
         }
 
 
@@ -106,8 +192,9 @@ class APIInterface:
         self.disable_open_id_discovery_configuration_get = False
 
     @abstractmethod
-    async def open_id_discovery_configuration_get(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt;\
-            OpenIdDiscoveryConfigurationGetResponse:
+    async def open_id_discovery_configuration_get(
+        self, api_options: APIOptions, user_context: Dict[str, Any]
+    ) -&gt; Union[OpenIdDiscoveryConfigurationGetResponse, GeneralErrorResponse]:
         pass</code></pre>
 </details>
 </section>
@@ -134,8 +221,9 @@ class APIInterface:
         self.disable_open_id_discovery_configuration_get = False
 
     @abstractmethod
-    async def open_id_discovery_configuration_get(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt;\
-            OpenIdDiscoveryConfigurationGetResponse:
+    async def open_id_discovery_configuration_get(
+        self, api_options: APIOptions, user_context: Dict[str, Any]
+    ) -&gt; Union[OpenIdDiscoveryConfigurationGetResponse, GeneralErrorResponse]:
         pass</code></pre>
 </details>
 <h3>Subclasses</h3>
@@ -145,19 +233,10 @@ class APIInterface:
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.openid.interfaces.APIInterface.open_id_discovery_configuration_get"><code class="name flex">
-<span>async def <span class="ident">open_id_discovery_configuration_get</span></span>(<span>self, api_options: <a title="supertokens_python.recipe.openid.interfaces.APIOptions" href="#supertokens_python.recipe.openid.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse" href="#supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse">OpenIdDiscoveryConfigurationGetResponse</a></span>
+<span>async def <span class="ident">open_id_discovery_configuration_get</span></span>(<span>self, api_options: <a title="supertokens_python.recipe.openid.interfaces.APIOptions" href="#supertokens_python.recipe.openid.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any]) ‑> Union[<a title="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse" href="#supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse">OpenIdDiscoveryConfigurationGetResponse</a>, <a title="supertokens_python.types.GeneralErrorResponse" href="../../types.html#supertokens_python.types.GeneralErrorResponse">GeneralErrorResponse</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def open_id_discovery_configuration_get(self, api_options: APIOptions, user_context: Dict[str, Any]) -&gt;\
-        OpenIdDiscoveryConfigurationGetResponse:
-    pass</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
@@ -172,8 +251,14 @@ async def open_id_discovery_configuration_get(self, api_options: APIOptions, use
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class APIOptions:
-    def __init__(self, request: BaseRequest, response: BaseResponse, recipe_id: str,
-                 config: OpenIdConfig, recipe_implementation: RecipeInterface):
+    def __init__(
+        self,
+        request: BaseRequest,
+        response: BaseResponse,
+        recipe_id: str,
+        config: OpenIdConfig,
+        recipe_implementation: RecipeInterface,
+    ):
         self.request = request
         self.response = response
         self.recipe_id = recipe_id
@@ -183,7 +268,71 @@ async def open_id_discovery_configuration_get(self, api_options: APIOptions, use
 </dd>
 <dt id="supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult"><code class="flex name class">
 <span>class <span class="ident">GetOpenIdDiscoveryConfigurationResult</span></span>
-<span>(</span><span>status: Literal['OK'], issuer: str, jwks_uri: str)</span>
+<span>(</span><span>issuer: str, jwks_uri: str, authorization_endpoint: str, token_endpoint: str, userinfo_endpoint: str, revocation_endpoint: str, token_introspection_endpoint: str, end_session_endpoint: str, subject_types_supported: List[str], id_token_signing_alg_values_supported: List[str], response_types_supported: List[str])</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class GetOpenIdDiscoveryConfigurationResult:
+    def __init__(
+        self,
+        issuer: str,
+        jwks_uri: str,
+        authorization_endpoint: str,
+        token_endpoint: str,
+        userinfo_endpoint: str,
+        revocation_endpoint: str,
+        token_introspection_endpoint: str,
+        end_session_endpoint: str,
+        subject_types_supported: List[str],
+        id_token_signing_alg_values_supported: List[str],
+        response_types_supported: List[str],
+    ):
+        self.issuer = issuer
+        self.jwks_uri = jwks_uri
+        self.authorization_endpoint = authorization_endpoint
+        self.token_endpoint = token_endpoint
+        self.userinfo_endpoint = userinfo_endpoint
+        self.revocation_endpoint = revocation_endpoint
+        self.token_introspection_endpoint = token_introspection_endpoint
+        self.end_session_endpoint = end_session_endpoint
+        self.subject_types_supported = subject_types_supported
+        self.id_token_signing_alg_values_supported = (
+            id_token_signing_alg_values_supported
+        )
+        self.response_types_supported = response_types_supported
+
+    def to_json(self) -&gt; Dict[str, Any]:
+        return {
+            &#34;issuer&#34;: self.issuer,
+            &#34;jwks_uri&#34;: self.jwks_uri,
+            &#34;authorization_endpoint&#34;: self.authorization_endpoint,
+            &#34;token_endpoint&#34;: self.token_endpoint,
+            &#34;userinfo_endpoint&#34;: self.userinfo_endpoint,
+            &#34;revocation_endpoint&#34;: self.revocation_endpoint,
+            &#34;token_introspection_endpoint&#34;: self.token_introspection_endpoint,
+            &#34;end_session_endpoint&#34;: self.end_session_endpoint,
+            &#34;subject_types_supported&#34;: self.subject_types_supported,
+            &#34;id_token_signing_alg_values_supported&#34;: self.id_token_signing_alg_values_supported,
+            &#34;response_types_supported&#34;: self.response_types_supported,
+        }</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult.to_json"><code class="name flex">
+<span>def <span class="ident">to_json</span></span>(<span>self) ‑> Dict[str, Any]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+</dd>
+<dt id="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse"><code class="flex name class">
+<span>class <span class="ident">OpenIdDiscoveryConfigurationGetResponse</span></span>
+<span>(</span><span>issuer: str, jwks_uri: str, authorization_endpoint: str, token_endpoint: str, userinfo_endpoint: str, revocation_endpoint: str, token_introspection_endpoint: str, end_session_endpoint: str, subject_types_supported: List[str], id_token_signing_alg_values_supported: List[str], response_types_supported: List[str])</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Helper class that provides a standard way to create an ABC using
@@ -192,42 +341,65 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class GetOpenIdDiscoveryConfigurationResult(ABC):
+<pre><code class="python">class OpenIdDiscoveryConfigurationGetResponse(APIResponse):
+    status: str = &#34;OK&#34;
+
     def __init__(
-            self, status: Literal[&#39;OK&#39;], issuer: str, jwks_uri: str):
-        self.status = status
-        self.issuer = issuer
-        self.jwks_uri = jwks_uri</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>abc.ABC</li>
-</ul>
-</dd>
-<dt id="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse"><code class="flex name class">
-<span>class <span class="ident">OpenIdDiscoveryConfigurationGetResponse</span></span>
-<span>(</span><span>status: Literal['OK'], issuer: str, jwks_uri: str)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class OpenIdDiscoveryConfigurationGetResponse:
-    def __init__(
-            self, status: Literal[&#39;OK&#39;], issuer: str, jwks_uri: str):
-        self.status = status
+        self,
+        issuer: str,
+        jwks_uri: str,
+        authorization_endpoint: str,
+        token_endpoint: str,
+        userinfo_endpoint: str,
+        revocation_endpoint: str,
+        token_introspection_endpoint: str,
+        end_session_endpoint: str,
+        subject_types_supported: List[str],
+        id_token_signing_alg_values_supported: List[str],
+        response_types_supported: List[str],
+    ):
         self.issuer = issuer
         self.jwks_uri = jwks_uri
+        self.authorization_endpoint = authorization_endpoint
+        self.token_endpoint = token_endpoint
+        self.userinfo_endpoint = userinfo_endpoint
+        self.revocation_endpoint = revocation_endpoint
+        self.token_introspection_endpoint = token_introspection_endpoint
+        self.end_session_endpoint = end_session_endpoint
+        self.subject_types_supported = subject_types_supported
+        self.id_token_signing_alg_values_supported = (
+            id_token_signing_alg_values_supported
+        )
+        self.response_types_supported = response_types_supported
 
     def to_json(self):
         return {
-            &#39;status&#39;: self.status,
-            &#39;issuer&#39;: self.issuer,
-            &#39;jwks_uri&#39;: self.jwks_uri
+            &#34;status&#34;: self.status,
+            &#34;issuer&#34;: self.issuer,
+            &#34;jwks_uri&#34;: self.jwks_uri,
+            &#34;authorization_endpoint&#34;: self.authorization_endpoint,
+            &#34;token_endpoint&#34;: self.token_endpoint,
+            &#34;userinfo_endpoint&#34;: self.userinfo_endpoint,
+            &#34;revocation_endpoint&#34;: self.revocation_endpoint,
+            &#34;token_introspection_endpoint&#34;: self.token_introspection_endpoint,
+            &#34;end_session_endpoint&#34;: self.end_session_endpoint,
+            &#34;subject_types_supported&#34;: self.subject_types_supported,
+            &#34;id_token_signing_alg_values_supported&#34;: self.id_token_signing_alg_values_supported,
+            &#34;response_types_supported&#34;: self.response_types_supported,
         }</code></pre>
 </details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="supertokens_python.types.APIResponse" href="../../types.html#supertokens_python.types.APIResponse">APIResponse</a></li>
+<li>abc.ABC</li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse.status"><code class="name">var <span class="ident">status</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse.to_json"><code class="name flex">
@@ -235,17 +407,6 @@ inheritance.</p></div>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def to_json(self):
-    return {
-        &#39;status&#39;: self.status,
-        &#39;issuer&#39;: self.issuer,
-        &#39;jwks_uri&#39;: self.jwks_uri
-    }</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
@@ -264,7 +425,13 @@ inheritance.</p></div>
         pass
 
     @abstractmethod
-    async def create_jwt(self, payload: Dict[str, Any], validity_seconds: Union[int, None], user_context: Dict[str, Any]) -&gt; CreateJwtResult:
+    async def create_jwt(
+        self,
+        payload: Dict[str, Any],
+        validity_seconds: Optional[int],
+        use_static_signing_key: Optional[bool],
+        user_context: Dict[str, Any],
+    ) -&gt; Union[CreateJwtOkResult, CreateJwtResultUnsupportedAlgorithm]:
         pass
 
     @abstractmethod
@@ -272,7 +439,9 @@ inheritance.</p></div>
         pass
 
     @abstractmethod
-    async def get_open_id_discovery_configuration(self, user_context: Dict[str, Any]) -&gt; GetOpenIdDiscoveryConfigurationResult:
+    async def get_open_id_discovery_configuration(
+        self, user_context: Dict[str, Any]
+    ) -&gt; GetOpenIdDiscoveryConfigurationResult:
         pass</code></pre>
 </details>
 <h3>Ancestors</h3>
@@ -286,46 +455,22 @@ inheritance.</p></div>
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.openid.interfaces.RecipeInterface.create_jwt"><code class="name flex">
-<span>async def <span class="ident">create_jwt</span></span>(<span>self, payload: Dict[str, Any], validity_seconds: Optional[int], user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.jwt.interfaces.CreateJwtResult" href="../jwt/interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtResult">CreateJwtResult</a></span>
+<span>async def <span class="ident">create_jwt</span></span>(<span>self, payload: Dict[str, Any], validity_seconds: Optional[int], use_static_signing_key: Optional[bool], user_context: Dict[str, Any]) ‑> Union[<a title="supertokens_python.recipe.jwt.interfaces.CreateJwtOkResult" href="../jwt/interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtOkResult">CreateJwtOkResult</a>, <a title="supertokens_python.recipe.jwt.interfaces.CreateJwtResultUnsupportedAlgorithm" href="../jwt/interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtResultUnsupportedAlgorithm">CreateJwtResultUnsupportedAlgorithm</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def create_jwt(self, payload: Dict[str, Any], validity_seconds: Union[int, None], user_context: Dict[str, Any]) -&gt; CreateJwtResult:
-    pass</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.openid.interfaces.RecipeInterface.get_jwks"><code class="name flex">
 <span>async def <span class="ident">get_jwks</span></span>(<span>self, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.jwt.interfaces.GetJWKSResult" href="../jwt/interfaces.html#supertokens_python.recipe.jwt.interfaces.GetJWKSResult">GetJWKSResult</a></span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def get_jwks(self, user_context: Dict[str, Any]) -&gt; GetJWKSResult:
-    pass</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.openid.interfaces.RecipeInterface.get_open_id_discovery_configuration"><code class="name flex">
 <span>async def <span class="ident">get_open_id_discovery_configuration</span></span>(<span>self, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult" href="#supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult">GetOpenIdDiscoveryConfigurationResult</a></span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def get_open_id_discovery_configuration(self, user_context: Dict[str, Any]) -&gt; GetOpenIdDiscoveryConfigurationResult:
-    pass</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
@@ -333,7 +478,7 @@ async def get_open_id_discovery_configuration(self, user_context: Dict[str, Any]
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -356,10 +501,14 @@ async def get_open_id_discovery_configuration(self, user_context: Dict[str, Any]
 </li>
 <li>
 <h4><code><a title="supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult" href="#supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult">GetOpenIdDiscoveryConfigurationResult</a></code></h4>
+<ul class="">
+<li><code><a title="supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult.to_json" href="#supertokens_python.recipe.openid.interfaces.GetOpenIdDiscoveryConfigurationResult.to_json">to_json</a></code></li>
+</ul>
 </li>
 <li>
 <h4><code><a title="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse" href="#supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse">OpenIdDiscoveryConfigurationGetResponse</a></code></h4>
 <ul class="">
+<li><code><a title="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse.status" href="#supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse.status">status</a></code></li>
 <li><code><a title="supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse.to_json" href="#supertokens_python.recipe.openid.interfaces.OpenIdDiscoveryConfigurationGetResponse.to_json">to_json</a></code></li>
 </ul>
 </li>
@@ -377,7 +526,7 @@ async def get_open_id_discovery_configuration(self, user_context: Dict[str, Any]
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

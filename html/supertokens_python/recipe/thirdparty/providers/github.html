@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.thirdparty.providers.github API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,81 +41,105 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Union
+import base64
+from typing import Any, Dict, List, Optional
 
-from httpx import AsyncClient
-from supertokens_python.recipe.thirdparty.provider import Provider
-from supertokens_python.recipe.thirdparty.types import (
-    AccessTokenAPI, AuthorisationRedirectAPI, UserInfo, UserInfoEmail)
+from supertokens_python.recipe.thirdparty.providers.utils import (
+    do_get_request,
+    do_post_request,
+)
+from supertokens_python.recipe.thirdparty.types import UserInfo, UserInfoEmail
 
-if TYPE_CHECKING:
-    from supertokens_python.framework.request import BaseRequest
+from ..provider import Provider, ProviderConfigForClient, ProviderInput
+from ..types import RawUserInfoFromProvider
+from .custom import GenericProvider, NewProvider
 
-from supertokens_python.utils import get_filtered_list
 
+class GithubImpl(GenericProvider):
+    async def get_config_for_client_type(
+        self, client_type: Optional[str], user_context: Dict[str, Any]
+    ) -&gt; ProviderConfigForClient:
+        config = await super().get_config_for_client_type(client_type, user_context)
 
-class Github(Provider):
-    def __init__(self, client_id: str, client_secret: str, scope: Union[None, List[str]] = None,
-                 authorisation_redirect: Union[None, Dict[str, Union[str, Callable[[
-                     BaseRequest], str]]]] = None,
-                 is_default: bool = False):
-        super().__init__(&#39;github&#39;, client_id, is_default)
-        default_scopes = [&#34;read:user&#34;, &#34;user:email&#34;]
-        if scope is None:
-            scope = default_scopes
-        self.client_secret = client_secret
-        self.scopes = list(set(scope))
-        self.access_token_api_url = &#39;https://github.com/login/oauth/access_token&#39;
-        self.authorisation_redirect_url = &#39;https://github.com/login/oauth/authorize&#39;
-        self.authorisation_redirect_params = {}
-        if authorisation_redirect is not None:
-            self.authorisation_redirect_params = authorisation_redirect
+        if config.scope is None:
+            config.scope = [&#34;read:user&#34;, &#34;user:email&#34;]
 
-    async def get_profile_info(self, auth_code_response: Dict[str, Any], user_context: Dict[str, Any]) -&gt; UserInfo:
-        access_token: str = auth_code_response[&#39;access_token&#39;]
-        params = {
-            &#39;alt&#39;: &#39;json&#39;
-        }
+        return config
+
+    async def get_user_info(
+        self, oauth_tokens: Dict[str, Any], user_context: Dict[str, Any]
+    ) -&gt; UserInfo:
         headers = {
-            &#39;Authorization&#39;: &#39;Bearer &#39; + access_token,
-            &#39;Accept&#39;: &#39;application/vnd.github.v3+json&#39;
+            &#34;Authorization&#34;: f&#34;Bearer {oauth_tokens.get(&#39;access_token&#39;)}&#34;,
+            &#34;Accept&#34;: &#34;application/vnd.github.v3+json&#34;,
         }
-        async with AsyncClient() as client:
-            response_user = await client.get(url=&#39;https://api.github.com/user&#39;, params=params, headers=headers)
-            response_email = await client.get(url=&#39;https://api.github.com/user/emails&#39;, params=params, headers=headers)
-            user_info = response_user.json()
-            emails_info = response_email.json()
-            user_id = str(user_info[&#39;id&#39;])
-            email_info = get_filtered_list(
-                lambda x: &#39;primary&#39; in x and x[&#39;primary&#39;], emails_info)
 
-            if len(email_info) == 0:
-                return UserInfo(user_id)
-            is_email_verified = email_info[0][&#39;verified&#39;] if &#39;verified&#39; in email_info[0] else False
-            email = email_info[0][&#39;email&#39;] if &#39;email&#39; in email_info[0] else user_info[&#39;email&#39;]
-            return UserInfo(user_id, UserInfoEmail(email, is_email_verified))
+        # https://docs.github.com/en/rest/users/emails?apiVersion=2022-11-28
+        user_info = await do_get_request(&#34;https://api.github.com/user&#34;, headers=headers)
+        user_email_info: List[Any] = await do_get_request(
+            &#34;https://api.github.com/user/emails&#34;, headers=headers
+        )  # type: ignore
 
-    def get_authorisation_redirect_api_info(self, user_context: Dict[str, Any]) -&gt; AuthorisationRedirectAPI:
-        params = {
-            &#39;scope&#39;: &#39; &#39;.join(self.scopes),
-            &#39;client_id&#39;: self.client_id,
-            **self.authorisation_redirect_params
-        }
-        return AuthorisationRedirectAPI(
-            self.authorisation_redirect_url, params)
+        raw_user_info_from_provider = RawUserInfoFromProvider({}, {})
+        raw_user_info_from_provider.from_user_info_api = user_info
+        raw_user_info_from_provider.from_user_info_api[&#34;emails&#34;] = user_email_info
 
-    def get_access_token_api_info(
-            self, redirect_uri: str, auth_code_from_request: str, user_context: Dict[str, Any]) -&gt; AccessTokenAPI:
-        params = {
-            &#39;client_id&#39;: self.client_id,
-            &#39;client_secret&#39;: self.client_secret,
-            &#39;code&#39;: auth_code_from_request,
-            &#39;redirect_uri&#39;: redirect_uri
-        }
-        return AccessTokenAPI(self.access_token_api_url, params)
+        # Get the primary email from the Email response
+        # Create an object if primary email found
+        primary_email_info: UserInfoEmail | None = None
+        for email_detail in user_email_info:
+            if email_detail[&#34;primary&#34;]:
+                primary_email_info = UserInfoEmail(
+                    email=email_detail[&#34;email&#34;],
+                    is_verified=email_detail[&#34;verified&#34;],
+                )
+                break
 
-    def get_redirect_uri(self, user_context: Dict[str, Any]) -&gt; Union[None, str]:
-        return None</code></pre>
+        result = UserInfo(
+            third_party_user_id=str(user_info[&#34;id&#34;]),
+            email=primary_email_info,
+            raw_user_info_from_provider=raw_user_info_from_provider,
+        )
+
+        return result
+
+
+def Github(input: ProviderInput) -&gt; Provider:  # pylint: disable=redefined-builtin
+    if not input.config.name:
+        input.config.name = &#34;Github&#34;
+
+    if not input.config.authorization_endpoint:
+        input.config.authorization_endpoint = &#34;https://github.com/login/oauth/authorize&#34;
+
+    if not input.config.token_endpoint:
+        input.config.token_endpoint = &#34;https://github.com/login/oauth/access_token&#34;
+
+    if input.config.validate_access_token is None:
+        input.config.validate_access_token = validate_access_token
+
+    return NewProvider(input, GithubImpl)
+
+
+async def validate_access_token(
+    access_token: str, config: ProviderConfigForClient, _: Dict[str, Any]
+):
+    client_secret = &#34;&#34; if config.client_secret is None else config.client_secret
+    basic_auth_token = base64.b64encode(
+        f&#34;{config.client_id}:{client_secret}&#34;.encode()
+    ).decode()
+
+    url = f&#34;https://api.github.com/applications/{config.client_id}/token&#34;
+    headers = {
+        &#34;Authorization&#34;: f&#34;Basic {basic_auth_token}&#34;,
+        &#34;Content-Type&#34;: &#34;application/json&#34;,
+    }
+
+    status, body = await do_post_request(url, {&#34;access_token&#34;: access_token}, headers)
+    if status != 200:
+        raise ValueError(&#34;Invalid access token&#34;)
+
+    if &#34;app&#34; not in body or body[&#34;app&#34;].get(&#34;client_id&#34;) != config.client_id:
+        raise ValueError(&#34;Access token does not belong to your application&#34;)</code></pre>
 </details>
 </section>
 <section>
@@ -123,176 +147,101 @@ class Github(Provider):
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="supertokens_python.recipe.thirdparty.providers.github.Github"><code class="name flex">
+<span>def <span class="ident">Github</span></span>(<span>input: ProviderInput) ‑> <a title="supertokens_python.recipe.thirdparty.provider.Provider" href="../provider.html#supertokens_python.recipe.thirdparty.provider.Provider">Provider</a></span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="supertokens_python.recipe.thirdparty.providers.github.validate_access_token"><code class="name flex">
+<span>async def <span class="ident">validate_access_token</span></span>(<span>access_token: str, config: ProviderConfigForClient, _: Dict[str, Any])</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
 </section>
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
-<dt id="supertokens_python.recipe.thirdparty.providers.github.Github"><code class="flex name class">
-<span>class <span class="ident">Github</span></span>
-<span>(</span><span>client_id: str, client_secret: str, scope: Union[None, List[str]] = None, authorisation_redirect: Union[None, Dict[str, Union[str, Callable[[BaseRequest], str]]]] = None, is_default: bool = False)</span>
+<dt id="supertokens_python.recipe.thirdparty.providers.github.GithubImpl"><code class="flex name class">
+<span>class <span class="ident">GithubImpl</span></span>
+<span>(</span><span>provider_config: <a title="supertokens_python.recipe.thirdparty.provider.ProviderConfig" href="../provider.html#supertokens_python.recipe.thirdparty.provider.ProviderConfig">ProviderConfig</a>)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
+<div class="desc"></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class Github(Provider):
-    def __init__(self, client_id: str, client_secret: str, scope: Union[None, List[str]] = None,
-                 authorisation_redirect: Union[None, Dict[str, Union[str, Callable[[
-                     BaseRequest], str]]]] = None,
-                 is_default: bool = False):
-        super().__init__(&#39;github&#39;, client_id, is_default)
-        default_scopes = [&#34;read:user&#34;, &#34;user:email&#34;]
-        if scope is None:
-            scope = default_scopes
-        self.client_secret = client_secret
-        self.scopes = list(set(scope))
-        self.access_token_api_url = &#39;https://github.com/login/oauth/access_token&#39;
-        self.authorisation_redirect_url = &#39;https://github.com/login/oauth/authorize&#39;
-        self.authorisation_redirect_params = {}
-        if authorisation_redirect is not None:
-            self.authorisation_redirect_params = authorisation_redirect
+<pre><code class="python">class GithubImpl(GenericProvider):
+    async def get_config_for_client_type(
+        self, client_type: Optional[str], user_context: Dict[str, Any]
+    ) -&gt; ProviderConfigForClient:
+        config = await super().get_config_for_client_type(client_type, user_context)
 
-    async def get_profile_info(self, auth_code_response: Dict[str, Any], user_context: Dict[str, Any]) -&gt; UserInfo:
-        access_token: str = auth_code_response[&#39;access_token&#39;]
-        params = {
-            &#39;alt&#39;: &#39;json&#39;
-        }
+        if config.scope is None:
+            config.scope = [&#34;read:user&#34;, &#34;user:email&#34;]
+
+        return config
+
+    async def get_user_info(
+        self, oauth_tokens: Dict[str, Any], user_context: Dict[str, Any]
+    ) -&gt; UserInfo:
         headers = {
-            &#39;Authorization&#39;: &#39;Bearer &#39; + access_token,
-            &#39;Accept&#39;: &#39;application/vnd.github.v3+json&#39;
+            &#34;Authorization&#34;: f&#34;Bearer {oauth_tokens.get(&#39;access_token&#39;)}&#34;,
+            &#34;Accept&#34;: &#34;application/vnd.github.v3+json&#34;,
         }
-        async with AsyncClient() as client:
-            response_user = await client.get(url=&#39;https://api.github.com/user&#39;, params=params, headers=headers)
-            response_email = await client.get(url=&#39;https://api.github.com/user/emails&#39;, params=params, headers=headers)
-            user_info = response_user.json()
-            emails_info = response_email.json()
-            user_id = str(user_info[&#39;id&#39;])
-            email_info = get_filtered_list(
-                lambda x: &#39;primary&#39; in x and x[&#39;primary&#39;], emails_info)
 
-            if len(email_info) == 0:
-                return UserInfo(user_id)
-            is_email_verified = email_info[0][&#39;verified&#39;] if &#39;verified&#39; in email_info[0] else False
-            email = email_info[0][&#39;email&#39;] if &#39;email&#39; in email_info[0] else user_info[&#39;email&#39;]
-            return UserInfo(user_id, UserInfoEmail(email, is_email_verified))
+        # https://docs.github.com/en/rest/users/emails?apiVersion=2022-11-28
+        user_info = await do_get_request(&#34;https://api.github.com/user&#34;, headers=headers)
+        user_email_info: List[Any] = await do_get_request(
+            &#34;https://api.github.com/user/emails&#34;, headers=headers
+        )  # type: ignore
 
-    def get_authorisation_redirect_api_info(self, user_context: Dict[str, Any]) -&gt; AuthorisationRedirectAPI:
-        params = {
-            &#39;scope&#39;: &#39; &#39;.join(self.scopes),
-            &#39;client_id&#39;: self.client_id,
-            **self.authorisation_redirect_params
-        }
-        return AuthorisationRedirectAPI(
-            self.authorisation_redirect_url, params)
+        raw_user_info_from_provider = RawUserInfoFromProvider({}, {})
+        raw_user_info_from_provider.from_user_info_api = user_info
+        raw_user_info_from_provider.from_user_info_api[&#34;emails&#34;] = user_email_info
 
-    def get_access_token_api_info(
-            self, redirect_uri: str, auth_code_from_request: str, user_context: Dict[str, Any]) -&gt; AccessTokenAPI:
-        params = {
-            &#39;client_id&#39;: self.client_id,
-            &#39;client_secret&#39;: self.client_secret,
-            &#39;code&#39;: auth_code_from_request,
-            &#39;redirect_uri&#39;: redirect_uri
-        }
-        return AccessTokenAPI(self.access_token_api_url, params)
+        # Get the primary email from the Email response
+        # Create an object if primary email found
+        primary_email_info: UserInfoEmail | None = None
+        for email_detail in user_email_info:
+            if email_detail[&#34;primary&#34;]:
+                primary_email_info = UserInfoEmail(
+                    email=email_detail[&#34;email&#34;],
+                    is_verified=email_detail[&#34;verified&#34;],
+                )
+                break
 
-    def get_redirect_uri(self, user_context: Dict[str, Any]) -&gt; Union[None, str]:
-        return None</code></pre>
+        result = UserInfo(
+            third_party_user_id=str(user_info[&#34;id&#34;]),
+            email=primary_email_info,
+            raw_user_info_from_provider=raw_user_info_from_provider,
+        )
+
+        return result</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
+<li><a title="supertokens_python.recipe.thirdparty.providers.custom.GenericProvider" href="custom.html#supertokens_python.recipe.thirdparty.providers.custom.GenericProvider">GenericProvider</a></li>
 <li><a title="supertokens_python.recipe.thirdparty.provider.Provider" href="../provider.html#supertokens_python.recipe.thirdparty.provider.Provider">Provider</a></li>
-<li>abc.ABC</li>
 </ul>
 <h3>Methods</h3>
 <dl>
-<dt id="supertokens_python.recipe.thirdparty.providers.github.Github.get_access_token_api_info"><code class="name flex">
-<span>def <span class="ident">get_access_token_api_info</span></span>(<span>self, redirect_uri: str, auth_code_from_request: str, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.types.AccessTokenAPI" href="../types.html#supertokens_python.recipe.thirdparty.types.AccessTokenAPI">AccessTokenAPI</a></span>
+<dt id="supertokens_python.recipe.thirdparty.providers.github.GithubImpl.get_config_for_client_type"><code class="name flex">
+<span>async def <span class="ident">get_config_for_client_type</span></span>(<span>self, client_type: Optional[str], user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.provider.ProviderConfigForClient" href="../provider.html#supertokens_python.recipe.thirdparty.provider.ProviderConfigForClient">ProviderConfigForClient</a></span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_access_token_api_info(
-        self, redirect_uri: str, auth_code_from_request: str, user_context: Dict[str, Any]) -&gt; AccessTokenAPI:
-    params = {
-        &#39;client_id&#39;: self.client_id,
-        &#39;client_secret&#39;: self.client_secret,
-        &#39;code&#39;: auth_code_from_request,
-        &#39;redirect_uri&#39;: redirect_uri
-    }
-    return AccessTokenAPI(self.access_token_api_url, params)</code></pre>
-</details>
 </dd>
-<dt id="supertokens_python.recipe.thirdparty.providers.github.Github.get_authorisation_redirect_api_info"><code class="name flex">
-<span>def <span class="ident">get_authorisation_redirect_api_info</span></span>(<span>self, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.types.AuthorisationRedirectAPI" href="../types.html#supertokens_python.recipe.thirdparty.types.AuthorisationRedirectAPI">AuthorisationRedirectAPI</a></span>
+<dt id="supertokens_python.recipe.thirdparty.providers.github.GithubImpl.get_user_info"><code class="name flex">
+<span>async def <span class="ident">get_user_info</span></span>(<span>self, oauth_tokens: Dict[str, Any], user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.types.UserInfo" href="../types.html#supertokens_python.recipe.thirdparty.types.UserInfo">UserInfo</a></span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_authorisation_redirect_api_info(self, user_context: Dict[str, Any]) -&gt; AuthorisationRedirectAPI:
-    params = {
-        &#39;scope&#39;: &#39; &#39;.join(self.scopes),
-        &#39;client_id&#39;: self.client_id,
-        **self.authorisation_redirect_params
-    }
-    return AuthorisationRedirectAPI(
-        self.authorisation_redirect_url, params)</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.providers.github.Github.get_profile_info"><code class="name flex">
-<span>async def <span class="ident">get_profile_info</span></span>(<span>self, auth_code_response: Dict[str, Any], user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.types.UserInfo" href="../types.html#supertokens_python.recipe.thirdparty.types.UserInfo">UserInfo</a></span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_profile_info(self, auth_code_response: Dict[str, Any], user_context: Dict[str, Any]) -&gt; UserInfo:
-    access_token: str = auth_code_response[&#39;access_token&#39;]
-    params = {
-        &#39;alt&#39;: &#39;json&#39;
-    }
-    headers = {
-        &#39;Authorization&#39;: &#39;Bearer &#39; + access_token,
-        &#39;Accept&#39;: &#39;application/vnd.github.v3+json&#39;
-    }
-    async with AsyncClient() as client:
-        response_user = await client.get(url=&#39;https://api.github.com/user&#39;, params=params, headers=headers)
-        response_email = await client.get(url=&#39;https://api.github.com/user/emails&#39;, params=params, headers=headers)
-        user_info = response_user.json()
-        emails_info = response_email.json()
-        user_id = str(user_info[&#39;id&#39;])
-        email_info = get_filtered_list(
-            lambda x: &#39;primary&#39; in x and x[&#39;primary&#39;], emails_info)
-
-        if len(email_info) == 0:
-            return UserInfo(user_id)
-        is_email_verified = email_info[0][&#39;verified&#39;] if &#39;verified&#39; in email_info[0] else False
-        email = email_info[0][&#39;email&#39;] if &#39;email&#39; in email_info[0] else user_info[&#39;email&#39;]
-        return UserInfo(user_id, UserInfoEmail(email, is_email_verified))</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.providers.github.Github.get_redirect_uri"><code class="name flex">
-<span>def <span class="ident">get_redirect_uri</span></span>(<span>self, user_context: Dict[str, Any]) ‑> Optional[str]</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_redirect_uri(self, user_context: Dict[str, Any]) -&gt; Union[None, str]:
-    return None</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
@@ -300,7 +249,7 @@ inheritance.</p></div>
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -310,15 +259,19 @@ inheritance.</p></div>
 <li><code><a title="supertokens_python.recipe.thirdparty.providers" href="index.html">supertokens_python.recipe.thirdparty.providers</a></code></li>
 </ul>
 </li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.Github" href="#supertokens_python.recipe.thirdparty.providers.github.Github">Github</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.validate_access_token" href="#supertokens_python.recipe.thirdparty.providers.github.validate_access_token">validate_access_token</a></code></li>
+</ul>
+</li>
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.providers.github.Github" href="#supertokens_python.recipe.thirdparty.providers.github.Github">Github</a></code></h4>
+<h4><code><a title="supertokens_python.recipe.thirdparty.providers.github.GithubImpl" href="#supertokens_python.recipe.thirdparty.providers.github.GithubImpl">GithubImpl</a></code></h4>
 <ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.Github.get_access_token_api_info" href="#supertokens_python.recipe.thirdparty.providers.github.Github.get_access_token_api_info">get_access_token_api_info</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.Github.get_authorisation_redirect_api_info" href="#supertokens_python.recipe.thirdparty.providers.github.Github.get_authorisation_redirect_api_info">get_authorisation_redirect_api_info</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.Github.get_profile_info" href="#supertokens_python.recipe.thirdparty.providers.github.Github.get_profile_info">get_profile_info</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.Github.get_redirect_uri" href="#supertokens_python.recipe.thirdparty.providers.github.Github.get_redirect_uri">get_redirect_uri</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.GithubImpl.get_config_for_client_type" href="#supertokens_python.recipe.thirdparty.providers.github.GithubImpl.get_config_for_client_type">get_config_for_client_type</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.providers.github.GithubImpl.get_user_info" href="#supertokens_python.recipe.thirdparty.providers.github.GithubImpl.get_user_info">get_user_info</a></code></li>
 </ul>
 </li>
 </ul>
@@ -327,7 +280,7 @@ inheritance.</p></div>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

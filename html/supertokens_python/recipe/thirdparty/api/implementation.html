@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.thirdparty.api.implementation API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,151 +41,274 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Union
-from urllib.parse import urlencode
+import json
+from base64 import b64decode
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from urllib.parse import parse_qs, urlencode, urlparse
 
-from httpx import AsyncClient
-from supertokens_python.exceptions import raise_general_exception
-from supertokens_python.recipe.session.asyncio import create_new_session
+from supertokens_python.recipe.accountlinking.types import AccountInfoWithRecipeId
+from supertokens_python.recipe.emailverification import EmailVerificationRecipe
+from supertokens_python.recipe.emailverification.asyncio import is_email_verified
+from supertokens_python.recipe.session import SessionContainer
 from supertokens_python.recipe.thirdparty.interfaces import (
-    APIInterface, AuthorisationUrlGetOkResponse,
-    SignInUpPostFieldErrorResponse, SignInUpPostNoEmailGivenByProviderResponse,
-    SignInUpPostOkResponse)
-from supertokens_python.recipe.thirdparty.types import UserInfo
+    APIInterface,
+    AuthorisationUrlGetOkResult,
+    SignInUpNotAllowed,
+    SignInUpOkResult,
+    SignInUpPostNoEmailGivenByProviderResponse,
+    SignInUpPostOkResult,
+)
+from supertokens_python.recipe.thirdparty.provider import RedirectUriInfo
+from supertokens_python.recipe.thirdparty.types import ThirdPartyInfo, UserInfoEmail
 
 if TYPE_CHECKING:
-    from supertokens_python.recipe.thirdparty.interfaces import (
-        APIOptions, AuthorisationUrlGetResponse, SignInUpPostResponse)
+    from supertokens_python.recipe.thirdparty.interfaces import APIOptions
     from supertokens_python.recipe.thirdparty.provider import Provider
 
-DEV_OAUTH_CLIENT_IDS = [
-    &#39;1060725074195-kmeum4crr01uirfl2op9kd5acmi9jutn.apps.googleusercontent.com&#39;,
-    # google client id
-    &#39;467101b197249757c71f&#39;  # github client id
-]
-DEV_KEY_IDENTIFIER = &#34;4398792-&#34;
-DEV_OAUTH_AUTHORIZATION_URL = &#39;https://supertokens.io/dev/oauth/redirect-to-provider&#39;
-DEV_OAUTH_REDIRECT_URL = &#39;https://supertokens.io/dev/oauth/redirect-to-app&#39;
-
-
-def is_using_oauth_development_client_id(client_id: str):
-    return client_id.startswith(
-        DEV_KEY_IDENTIFIER) or client_id in DEV_OAUTH_CLIENT_IDS
-
-
-def get_actual_client_id_from_development_client_id(client_id: str):
-    if client_id.startswith(DEV_KEY_IDENTIFIER):
-        return client_id.split(DEV_KEY_IDENTIFIER, 1)[1]
-    return client_id
+from supertokens_python.types import GeneralErrorResponse
 
 
 class APIImplementation(APIInterface):
-    async def authorisation_url_get(self, provider: Provider, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; AuthorisationUrlGetResponse:
-        authorisation_url_info = provider.get_authorisation_redirect_api_info(user_context)
+    async def authorisation_url_get(
+        self,
+        provider: Provider,
+        redirect_uri_on_provider_dashboard: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[AuthorisationUrlGetOkResult, GeneralErrorResponse]:
+        authorisation_url_info = await provider.get_authorisation_redirect_url(
+            redirect_uri_on_provider_dashboard=redirect_uri_on_provider_dashboard,
+            user_context=user_context,
+        )
 
-        params: Dict[str, str] = {}
-        for key, value in authorisation_url_info.params.items():
-            params[key] = value if not callable(
-                value) else value(api_options.request)
+        return AuthorisationUrlGetOkResult(
+            url_with_query_params=authorisation_url_info.url_with_query_params,
+            pkce_code_verifier=authorisation_url_info.pkce_code_verifier,
+        )
 
-        redirect_uri = provider.get_redirect_uri(user_context)
-        if redirect_uri is not None and not is_using_oauth_development_client_id(provider.client_id):
-            # the backend wants to set the redirectURI - so we set that here.
-            # we add the not development keys because the oauth provider will
-            # redirect to supertokens.io&#39;s URL which will redirect the app
-            # to the the user&#39;s website, which will handle the callback as usual.
-            # If we add this, then instead, the supertokens&#39; site will redirect
-            # the user to this API layer, which is not needed.
-            params[&#39;redirect_uri&#39;] = redirect_uri
+    async def sign_in_up_post(
+        self,
+        provider: Provider,
+        redirect_uri_info: Optional[RedirectUriInfo],
+        oauth_tokens: Optional[Dict[str, Any]],
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[
+        SignInUpPostOkResult,
+        SignInUpPostNoEmailGivenByProviderResponse,
+        SignInUpNotAllowed,
+        GeneralErrorResponse,
+    ]:
+        from supertokens_python.auth_utils import (
+            OkResponse,
+            PostAuthChecksOkResponse,
+            SignInNotAllowedResponse,
+            SignUpNotAllowedResponse,
+            get_authenticating_user_and_add_to_current_tenant_if_required,
+            post_auth_checks,
+            pre_auth_checks,
+        )
 
-        auth_url = authorisation_url_info.url
-        if is_using_oauth_development_client_id(provider.client_id):
-            params[&#39;actual_redirect_uri&#39;] = authorisation_url_info.url
+        error_code_map = {
+            &#34;SIGN_UP_NOT_ALLOWED&#34;: &#34;Cannot sign in / up due to security reasons. Please try a different login method or contact support. (ERR_CODE_006)&#34;,
+            &#34;SIGN_IN_NOT_ALLOWED&#34;: &#34;Cannot sign in / up due to security reasons. Please try a different login method or contact support. (ERR_CODE_004)&#34;,
+            &#34;LINKING_TO_SESSION_USER_FAILED&#34;: {
+                &#34;EMAIL_VERIFICATION_REQUIRED&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_020)&#34;,
+                &#34;RECIPE_USER_ID_ALREADY_LINKED_WITH_ANOTHER_PRIMARY_USER_ID_ERROR&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_021)&#34;,
+                &#34;ACCOUNT_INFO_ALREADY_ASSOCIATED_WITH_ANOTHER_PRIMARY_USER_ID_ERROR&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_022)&#34;,
+                &#34;SESSION_USER_ACCOUNT_INFO_ALREADY_ASSOCIATED_WITH_ANOTHER_PRIMARY_USER_ID_ERROR&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_023)&#34;,
+            },
+        }
 
-            for k, v in params.items():
-                if v == provider.client_id:
-                    params[k] = get_actual_client_id_from_development_client_id(
-                        provider.client_id)
-            auth_url = DEV_OAUTH_AUTHORIZATION_URL
+        oauth_tokens_to_use: Dict[str, Any] = {}
 
-        query_string = urlencode(params)
+        if redirect_uri_info is not None:
+            oauth_tokens_to_use = await provider.exchange_auth_code_for_oauth_tokens(
+                redirect_uri_info=redirect_uri_info,
+                user_context=user_context,
+            )
+        elif oauth_tokens is not None:
+            oauth_tokens_to_use = oauth_tokens
+        else:
+            raise Exception(&#34;should never come here&#34;)
 
-        url = auth_url + &#39;?&#39; + query_string
-        return AuthorisationUrlGetOkResponse(url)
+        user_info = await provider.get_user_info(
+            oauth_tokens=oauth_tokens_to_use,
+            user_context=user_context,
+        )
 
-    async def sign_in_up_post(self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: APIOptions, user_context: Dict[str, Any]) -&gt; SignInUpPostResponse:
+        if user_info.email is None and provider.config.require_email is False:
+            # We don&#39;t expect to get an email from this provider.
+            # So we generate a fake one
+            assert provider.config.generate_fake_email is not None
+            user_info.email = UserInfoEmail(
+                email=await provider.config.generate_fake_email(
+                    tenant_id, user_info.third_party_user_id, user_context
+                ),
+                is_verified=True,
+            )
 
-        redirect_uri_from_provider = provider.get_redirect_uri(user_context)
-        if is_using_oauth_development_client_id(provider.client_id):
-            redirect_uri = DEV_OAUTH_REDIRECT_URL
-        elif redirect_uri_from_provider is not None:
-            # we overwrite the redirectURI provided by the frontend
-            # since the backend wants to take charge of setting this.
-            redirect_uri = redirect_uri_from_provider
-        try:
-            if auth_code_response is None:
-                access_token_api_info = provider.get_access_token_api_info(
-                    redirect_uri, code, user_context)
-                if is_using_oauth_development_client_id(provider.client_id):
-                    for k, _ in access_token_api_info.params.items():
-                        if access_token_api_info.params[k] == provider.client_id:
-                            access_token_api_info.params[k] = get_actual_client_id_from_development_client_id(
-                                provider.client_id)
-                headers = {
-                    &#39;Accept&#39;: &#39;application/json&#39;,
-                    &#39;Content-Type&#39;: &#39;application/x-www-form-urlencoded&#39;
-                }
-                async with AsyncClient() as client:
-                    access_token_response = await client.post(access_token_api_info.url, data=access_token_api_info.params, headers=headers)  # type: ignore
-                    access_token_response = access_token_response.json()
-            else:
-                access_token_response = auth_code_response
-        except Exception as e:
-            raise_general_exception(e)
-
-        user_info: UserInfo
-        try:
-            user_info = await provider.get_profile_info(access_token_response, user_context)
-        except Exception as e:
-            return SignInUpPostFieldErrorResponse(str(e))
-        email = user_info.email.id if user_info.email is not None else None
-        email_verified = user_info.email.is_verified if user_info.email is not None else None
-        if email is None or email_verified is None:
+        email_info = user_info.email
+        if email_info is None:
             return SignInUpPostNoEmailGivenByProviderResponse()
 
-        signinup_response = await api_options.recipe_implementation.sign_in_up(provider.id, user_info.user_id, email, email_verified, user_context)
+        recipe_id = &#34;thirdparty&#34;
 
-        if signinup_response.is_field_error:
-            if signinup_response.error is None:
-                raise Exception(&#34;Should never come here&#34;)
-            return SignInUpPostFieldErrorResponse(signinup_response.error)
+        async def check_credentials_on_tenant(_: str):
+            # We essentially did this above when calling exchange_auth_code_for_oauth_tokens
+            return True
 
-        if signinup_response.user is None:
-            raise Exception(&#34;Should never come here&#34;)
+        authenticating_user = (
+            await get_authenticating_user_and_add_to_current_tenant_if_required(
+                third_party=ThirdPartyInfo(
+                    third_party_user_id=user_info.third_party_user_id,
+                    third_party_id=provider.id,
+                ),
+                email=None,
+                phone_number=None,
+                recipe_id=recipe_id,
+                user_context=user_context,
+                session=session,
+                tenant_id=tenant_id,
+                check_credentials_on_tenant=check_credentials_on_tenant,
+            )
+        )
 
-        if email_verified:
-            token_response = await api_options.email_verification_recipe_implementation.create_email_verification_token(user_id=signinup_response.user.user_id, email=signinup_response.user.email, user_context=user_context)
+        is_sign_up = authenticating_user is None
+        if authenticating_user is not None:
+            # This is a sign in. So before we proceed, we need to check if an email change
+            # is allowed since the email could have changed from the social provider&#39;s side.
+            # We do this check here and not in the recipe function cause we want to keep the
+            # recipe function checks to a minimum so that the dev has complete control of
+            # what they can do.
 
-            if token_response.is_ok:
-                if token_response.token is None:
-                    raise Exception(&#34;Should never come here&#34;)
-                await api_options.email_verification_recipe_implementation.verify_email_using_token(token=token_response.token, user_context=user_context)
+            # The is_email_change_allowed and pre_auth_checks functions take an is_verified boolean.
+            # Now, even though we already have that from the input, that&#39;s just what the provider says.
+            # If the provider says that the email is NOT verified, it could have been that the email
+            # is verified on the user&#39;s account via supertokens on a previous sign in / up.
+            # So we just check that as well before calling is_email_change_allowed
 
-        user = signinup_response.user
-        if user is None or signinup_response.created_new_user is None:
-            raise Exception(&#34;Should never come here&#34;)
-        session = await create_new_session(api_options.request, user.user_id, user_context)
+            assert authenticating_user.login_method is not None
+            recipe_user_id = authenticating_user.login_method.recipe_user_id
 
-        return SignInUpPostOkResponse(
-            user, signinup_response.created_new_user, access_token_response, session)
+            if (
+                not email_info.is_verified
+                and EmailVerificationRecipe.get_instance_optional() is not None
+            ):
+                email_info.is_verified = await is_email_verified(
+                    recipe_user_id,
+                    email_info.id,
+                    user_context,
+                )
 
-    async def apple_redirect_handler_post(self, code: str, state: str, api_options: APIOptions, user_context: Dict[str, Any]):
-        app_info = api_options.app_info
-        redirect_uri = app_info.website_domain.get_as_string_dangerous(
-        ) + app_info.website_base_path.get_as_string_dangerous() + &#39;/callback/apple?state=&#39; + state + &#39;&amp;code=&#39; + code
-        html_content = &#39;&lt;html&gt;&lt;head&gt;&lt;script&gt;window.location.replace(&#34;&#39; + \
-            redirect_uri + &#39;&#34;);&lt;/script&gt;&lt;/head&gt;&lt;/html&gt;&#39;
-        api_options.response.set_html_content(html_content)</code></pre>
+        pre_auth_checks_result = await pre_auth_checks(
+            authenticating_account_info=AccountInfoWithRecipeId(
+                recipe_id=recipe_id,
+                email=email_info.id,
+                third_party=ThirdPartyInfo(
+                    third_party_user_id=user_info.third_party_user_id,
+                    third_party_id=provider.id,
+                ),
+            ),
+            authenticating_user=(
+                authenticating_user.user if authenticating_user else None
+            ),
+            factor_ids=[&#34;thirdparty&#34;],
+            is_sign_up=is_sign_up,
+            is_verified=email_info.is_verified,
+            sign_in_verifies_login_method=email_info.is_verified,
+            skip_session_user_update_in_core=False,
+            tenant_id=tenant_id,
+            user_context=user_context,
+            session=session,
+            should_try_linking_with_session_user=should_try_linking_with_session_user,
+        )
+
+        if not isinstance(pre_auth_checks_result, OkResponse):
+            if isinstance(pre_auth_checks_result, SignUpNotAllowedResponse):
+                reason = error_code_map[&#34;SIGN_UP_NOT_ALLOWED&#34;]
+                assert isinstance(reason, str)
+                return SignInUpNotAllowed(reason)
+            if isinstance(pre_auth_checks_result, SignInNotAllowedResponse):
+                reason = error_code_map[&#34;SIGN_IN_NOT_ALLOWED&#34;]
+                assert isinstance(reason, str)
+                return SignInUpNotAllowed(reason)
+
+            reason_dict = error_code_map[&#34;LINKING_TO_SESSION_USER_FAILED&#34;]
+            assert isinstance(reason_dict, Dict)
+            reason = reason_dict[pre_auth_checks_result.reason]
+            return SignInUpNotAllowed(reason=reason)
+
+        signinup_response = await api_options.recipe_implementation.sign_in_up(
+            third_party_id=provider.id,
+            third_party_user_id=user_info.third_party_user_id,
+            email=email_info.id,
+            is_verified=email_info.is_verified,
+            oauth_tokens=oauth_tokens_to_use,
+            raw_user_info_from_provider=user_info.raw_user_info_from_provider,
+            session=session,
+            tenant_id=tenant_id,
+            user_context=user_context,
+            should_try_linking_with_session_user=should_try_linking_with_session_user,
+        )
+
+        if isinstance(signinup_response, SignInUpNotAllowed):
+            return signinup_response
+
+        if not isinstance(signinup_response, SignInUpOkResult):
+            reason_dict = error_code_map[&#34;LINKING_TO_SESSION_USER_FAILED&#34;]
+            assert isinstance(reason_dict, Dict)
+            reason = reason_dict[signinup_response.reason]
+            return SignInUpNotAllowed(reason=reason)
+
+        post_auth_checks_result = await post_auth_checks(
+            factor_id=&#34;thirdparty&#34;,
+            is_sign_up=is_sign_up,
+            authenticated_user=signinup_response.user,
+            recipe_user_id=signinup_response.recipe_user_id,
+            request=api_options.request,
+            tenant_id=tenant_id,
+            user_context=user_context,
+            session=session,
+        )
+
+        if not isinstance(post_auth_checks_result, PostAuthChecksOkResponse):
+            reason = error_code_map[&#34;SIGN_IN_NOT_ALLOWED&#34;]
+            assert isinstance(reason, str)
+            return SignInUpNotAllowed(reason)
+
+        return SignInUpPostOkResult(
+            created_new_recipe_user=signinup_response.created_new_recipe_user,
+            user=post_auth_checks_result.user,
+            session=post_auth_checks_result.session,
+            oauth_tokens=oauth_tokens_to_use,
+            raw_user_info_from_provider=user_info.raw_user_info_from_provider,
+        )
+
+    async def apple_redirect_handler_post(
+        self,
+        form_post_info: Dict[str, Any],
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ):
+        state_in_b64: str = form_post_info[&#34;state&#34;]
+        state = b64decode(state_in_b64).decode(&#34;utf-8&#34;)
+        state_obj = json.loads(state)
+        redirect_uri: str = state_obj[&#34;frontendRedirectURI&#34;]
+
+        url_obj = urlparse(redirect_uri)
+        qparams = parse_qs(url_obj.query)
+        for k, v in form_post_info.items():
+            qparams[k] = [v]
+
+        redirect_uri = url_obj._replace(query=urlencode(qparams, doseq=True)).geturl()
+
+        api_options.response.set_header(&#34;Location&#34;, redirect_uri)
+        api_options.response.set_status_code(303)
+        api_options.response.set_html_content(&#34;&#34;)</code></pre>
 </details>
 </section>
 <section>
@@ -193,38 +316,6 @@ class APIImplementation(APIInterface):
 <section>
 </section>
 <section>
-<h2 class="section-title" id="header-functions">Functions</h2>
-<dl>
-<dt id="supertokens_python.recipe.thirdparty.api.implementation.get_actual_client_id_from_development_client_id"><code class="name flex">
-<span>def <span class="ident">get_actual_client_id_from_development_client_id</span></span>(<span>client_id: str)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def get_actual_client_id_from_development_client_id(client_id: str):
-    if client_id.startswith(DEV_KEY_IDENTIFIER):
-        return client_id.split(DEV_KEY_IDENTIFIER, 1)[1]
-    return client_id</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.api.implementation.is_using_oauth_development_client_id"><code class="name flex">
-<span>def <span class="ident">is_using_oauth_development_client_id</span></span>(<span>client_id: str)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def is_using_oauth_development_client_id(client_id: str):
-    return client_id.startswith(
-        DEV_KEY_IDENTIFIER) or client_id in DEV_OAUTH_CLIENT_IDS</code></pre>
-</details>
-</dd>
-</dl>
 </section>
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
@@ -239,112 +330,246 @@ class APIImplementation(APIInterface):
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class APIImplementation(APIInterface):
-    async def authorisation_url_get(self, provider: Provider, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; AuthorisationUrlGetResponse:
-        authorisation_url_info = provider.get_authorisation_redirect_api_info(user_context)
+    async def authorisation_url_get(
+        self,
+        provider: Provider,
+        redirect_uri_on_provider_dashboard: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[AuthorisationUrlGetOkResult, GeneralErrorResponse]:
+        authorisation_url_info = await provider.get_authorisation_redirect_url(
+            redirect_uri_on_provider_dashboard=redirect_uri_on_provider_dashboard,
+            user_context=user_context,
+        )
 
-        params: Dict[str, str] = {}
-        for key, value in authorisation_url_info.params.items():
-            params[key] = value if not callable(
-                value) else value(api_options.request)
+        return AuthorisationUrlGetOkResult(
+            url_with_query_params=authorisation_url_info.url_with_query_params,
+            pkce_code_verifier=authorisation_url_info.pkce_code_verifier,
+        )
 
-        redirect_uri = provider.get_redirect_uri(user_context)
-        if redirect_uri is not None and not is_using_oauth_development_client_id(provider.client_id):
-            # the backend wants to set the redirectURI - so we set that here.
-            # we add the not development keys because the oauth provider will
-            # redirect to supertokens.io&#39;s URL which will redirect the app
-            # to the the user&#39;s website, which will handle the callback as usual.
-            # If we add this, then instead, the supertokens&#39; site will redirect
-            # the user to this API layer, which is not needed.
-            params[&#39;redirect_uri&#39;] = redirect_uri
+    async def sign_in_up_post(
+        self,
+        provider: Provider,
+        redirect_uri_info: Optional[RedirectUriInfo],
+        oauth_tokens: Optional[Dict[str, Any]],
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[
+        SignInUpPostOkResult,
+        SignInUpPostNoEmailGivenByProviderResponse,
+        SignInUpNotAllowed,
+        GeneralErrorResponse,
+    ]:
+        from supertokens_python.auth_utils import (
+            OkResponse,
+            PostAuthChecksOkResponse,
+            SignInNotAllowedResponse,
+            SignUpNotAllowedResponse,
+            get_authenticating_user_and_add_to_current_tenant_if_required,
+            post_auth_checks,
+            pre_auth_checks,
+        )
 
-        auth_url = authorisation_url_info.url
-        if is_using_oauth_development_client_id(provider.client_id):
-            params[&#39;actual_redirect_uri&#39;] = authorisation_url_info.url
+        error_code_map = {
+            &#34;SIGN_UP_NOT_ALLOWED&#34;: &#34;Cannot sign in / up due to security reasons. Please try a different login method or contact support. (ERR_CODE_006)&#34;,
+            &#34;SIGN_IN_NOT_ALLOWED&#34;: &#34;Cannot sign in / up due to security reasons. Please try a different login method or contact support. (ERR_CODE_004)&#34;,
+            &#34;LINKING_TO_SESSION_USER_FAILED&#34;: {
+                &#34;EMAIL_VERIFICATION_REQUIRED&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_020)&#34;,
+                &#34;RECIPE_USER_ID_ALREADY_LINKED_WITH_ANOTHER_PRIMARY_USER_ID_ERROR&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_021)&#34;,
+                &#34;ACCOUNT_INFO_ALREADY_ASSOCIATED_WITH_ANOTHER_PRIMARY_USER_ID_ERROR&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_022)&#34;,
+                &#34;SESSION_USER_ACCOUNT_INFO_ALREADY_ASSOCIATED_WITH_ANOTHER_PRIMARY_USER_ID_ERROR&#34;: &#34;Cannot sign in / up due to security reasons. Please contact support. (ERR_CODE_023)&#34;,
+            },
+        }
 
-            for k, v in params.items():
-                if v == provider.client_id:
-                    params[k] = get_actual_client_id_from_development_client_id(
-                        provider.client_id)
-            auth_url = DEV_OAUTH_AUTHORIZATION_URL
+        oauth_tokens_to_use: Dict[str, Any] = {}
 
-        query_string = urlencode(params)
+        if redirect_uri_info is not None:
+            oauth_tokens_to_use = await provider.exchange_auth_code_for_oauth_tokens(
+                redirect_uri_info=redirect_uri_info,
+                user_context=user_context,
+            )
+        elif oauth_tokens is not None:
+            oauth_tokens_to_use = oauth_tokens
+        else:
+            raise Exception(&#34;should never come here&#34;)
 
-        url = auth_url + &#39;?&#39; + query_string
-        return AuthorisationUrlGetOkResponse(url)
+        user_info = await provider.get_user_info(
+            oauth_tokens=oauth_tokens_to_use,
+            user_context=user_context,
+        )
 
-    async def sign_in_up_post(self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: APIOptions, user_context: Dict[str, Any]) -&gt; SignInUpPostResponse:
+        if user_info.email is None and provider.config.require_email is False:
+            # We don&#39;t expect to get an email from this provider.
+            # So we generate a fake one
+            assert provider.config.generate_fake_email is not None
+            user_info.email = UserInfoEmail(
+                email=await provider.config.generate_fake_email(
+                    tenant_id, user_info.third_party_user_id, user_context
+                ),
+                is_verified=True,
+            )
 
-        redirect_uri_from_provider = provider.get_redirect_uri(user_context)
-        if is_using_oauth_development_client_id(provider.client_id):
-            redirect_uri = DEV_OAUTH_REDIRECT_URL
-        elif redirect_uri_from_provider is not None:
-            # we overwrite the redirectURI provided by the frontend
-            # since the backend wants to take charge of setting this.
-            redirect_uri = redirect_uri_from_provider
-        try:
-            if auth_code_response is None:
-                access_token_api_info = provider.get_access_token_api_info(
-                    redirect_uri, code, user_context)
-                if is_using_oauth_development_client_id(provider.client_id):
-                    for k, _ in access_token_api_info.params.items():
-                        if access_token_api_info.params[k] == provider.client_id:
-                            access_token_api_info.params[k] = get_actual_client_id_from_development_client_id(
-                                provider.client_id)
-                headers = {
-                    &#39;Accept&#39;: &#39;application/json&#39;,
-                    &#39;Content-Type&#39;: &#39;application/x-www-form-urlencoded&#39;
-                }
-                async with AsyncClient() as client:
-                    access_token_response = await client.post(access_token_api_info.url, data=access_token_api_info.params, headers=headers)  # type: ignore
-                    access_token_response = access_token_response.json()
-            else:
-                access_token_response = auth_code_response
-        except Exception as e:
-            raise_general_exception(e)
-
-        user_info: UserInfo
-        try:
-            user_info = await provider.get_profile_info(access_token_response, user_context)
-        except Exception as e:
-            return SignInUpPostFieldErrorResponse(str(e))
-        email = user_info.email.id if user_info.email is not None else None
-        email_verified = user_info.email.is_verified if user_info.email is not None else None
-        if email is None or email_verified is None:
+        email_info = user_info.email
+        if email_info is None:
             return SignInUpPostNoEmailGivenByProviderResponse()
 
-        signinup_response = await api_options.recipe_implementation.sign_in_up(provider.id, user_info.user_id, email, email_verified, user_context)
+        recipe_id = &#34;thirdparty&#34;
 
-        if signinup_response.is_field_error:
-            if signinup_response.error is None:
-                raise Exception(&#34;Should never come here&#34;)
-            return SignInUpPostFieldErrorResponse(signinup_response.error)
+        async def check_credentials_on_tenant(_: str):
+            # We essentially did this above when calling exchange_auth_code_for_oauth_tokens
+            return True
 
-        if signinup_response.user is None:
-            raise Exception(&#34;Should never come here&#34;)
+        authenticating_user = (
+            await get_authenticating_user_and_add_to_current_tenant_if_required(
+                third_party=ThirdPartyInfo(
+                    third_party_user_id=user_info.third_party_user_id,
+                    third_party_id=provider.id,
+                ),
+                email=None,
+                phone_number=None,
+                recipe_id=recipe_id,
+                user_context=user_context,
+                session=session,
+                tenant_id=tenant_id,
+                check_credentials_on_tenant=check_credentials_on_tenant,
+            )
+        )
 
-        if email_verified:
-            token_response = await api_options.email_verification_recipe_implementation.create_email_verification_token(user_id=signinup_response.user.user_id, email=signinup_response.user.email, user_context=user_context)
+        is_sign_up = authenticating_user is None
+        if authenticating_user is not None:
+            # This is a sign in. So before we proceed, we need to check if an email change
+            # is allowed since the email could have changed from the social provider&#39;s side.
+            # We do this check here and not in the recipe function cause we want to keep the
+            # recipe function checks to a minimum so that the dev has complete control of
+            # what they can do.
 
-            if token_response.is_ok:
-                if token_response.token is None:
-                    raise Exception(&#34;Should never come here&#34;)
-                await api_options.email_verification_recipe_implementation.verify_email_using_token(token=token_response.token, user_context=user_context)
+            # The is_email_change_allowed and pre_auth_checks functions take an is_verified boolean.
+            # Now, even though we already have that from the input, that&#39;s just what the provider says.
+            # If the provider says that the email is NOT verified, it could have been that the email
+            # is verified on the user&#39;s account via supertokens on a previous sign in / up.
+            # So we just check that as well before calling is_email_change_allowed
 
-        user = signinup_response.user
-        if user is None or signinup_response.created_new_user is None:
-            raise Exception(&#34;Should never come here&#34;)
-        session = await create_new_session(api_options.request, user.user_id, user_context)
+            assert authenticating_user.login_method is not None
+            recipe_user_id = authenticating_user.login_method.recipe_user_id
 
-        return SignInUpPostOkResponse(
-            user, signinup_response.created_new_user, access_token_response, session)
+            if (
+                not email_info.is_verified
+                and EmailVerificationRecipe.get_instance_optional() is not None
+            ):
+                email_info.is_verified = await is_email_verified(
+                    recipe_user_id,
+                    email_info.id,
+                    user_context,
+                )
 
-    async def apple_redirect_handler_post(self, code: str, state: str, api_options: APIOptions, user_context: Dict[str, Any]):
-        app_info = api_options.app_info
-        redirect_uri = app_info.website_domain.get_as_string_dangerous(
-        ) + app_info.website_base_path.get_as_string_dangerous() + &#39;/callback/apple?state=&#39; + state + &#39;&amp;code=&#39; + code
-        html_content = &#39;&lt;html&gt;&lt;head&gt;&lt;script&gt;window.location.replace(&#34;&#39; + \
-            redirect_uri + &#39;&#34;);&lt;/script&gt;&lt;/head&gt;&lt;/html&gt;&#39;
-        api_options.response.set_html_content(html_content)</code></pre>
+        pre_auth_checks_result = await pre_auth_checks(
+            authenticating_account_info=AccountInfoWithRecipeId(
+                recipe_id=recipe_id,
+                email=email_info.id,
+                third_party=ThirdPartyInfo(
+                    third_party_user_id=user_info.third_party_user_id,
+                    third_party_id=provider.id,
+                ),
+            ),
+            authenticating_user=(
+                authenticating_user.user if authenticating_user else None
+            ),
+            factor_ids=[&#34;thirdparty&#34;],
+            is_sign_up=is_sign_up,
+            is_verified=email_info.is_verified,
+            sign_in_verifies_login_method=email_info.is_verified,
+            skip_session_user_update_in_core=False,
+            tenant_id=tenant_id,
+            user_context=user_context,
+            session=session,
+            should_try_linking_with_session_user=should_try_linking_with_session_user,
+        )
+
+        if not isinstance(pre_auth_checks_result, OkResponse):
+            if isinstance(pre_auth_checks_result, SignUpNotAllowedResponse):
+                reason = error_code_map[&#34;SIGN_UP_NOT_ALLOWED&#34;]
+                assert isinstance(reason, str)
+                return SignInUpNotAllowed(reason)
+            if isinstance(pre_auth_checks_result, SignInNotAllowedResponse):
+                reason = error_code_map[&#34;SIGN_IN_NOT_ALLOWED&#34;]
+                assert isinstance(reason, str)
+                return SignInUpNotAllowed(reason)
+
+            reason_dict = error_code_map[&#34;LINKING_TO_SESSION_USER_FAILED&#34;]
+            assert isinstance(reason_dict, Dict)
+            reason = reason_dict[pre_auth_checks_result.reason]
+            return SignInUpNotAllowed(reason=reason)
+
+        signinup_response = await api_options.recipe_implementation.sign_in_up(
+            third_party_id=provider.id,
+            third_party_user_id=user_info.third_party_user_id,
+            email=email_info.id,
+            is_verified=email_info.is_verified,
+            oauth_tokens=oauth_tokens_to_use,
+            raw_user_info_from_provider=user_info.raw_user_info_from_provider,
+            session=session,
+            tenant_id=tenant_id,
+            user_context=user_context,
+            should_try_linking_with_session_user=should_try_linking_with_session_user,
+        )
+
+        if isinstance(signinup_response, SignInUpNotAllowed):
+            return signinup_response
+
+        if not isinstance(signinup_response, SignInUpOkResult):
+            reason_dict = error_code_map[&#34;LINKING_TO_SESSION_USER_FAILED&#34;]
+            assert isinstance(reason_dict, Dict)
+            reason = reason_dict[signinup_response.reason]
+            return SignInUpNotAllowed(reason=reason)
+
+        post_auth_checks_result = await post_auth_checks(
+            factor_id=&#34;thirdparty&#34;,
+            is_sign_up=is_sign_up,
+            authenticated_user=signinup_response.user,
+            recipe_user_id=signinup_response.recipe_user_id,
+            request=api_options.request,
+            tenant_id=tenant_id,
+            user_context=user_context,
+            session=session,
+        )
+
+        if not isinstance(post_auth_checks_result, PostAuthChecksOkResponse):
+            reason = error_code_map[&#34;SIGN_IN_NOT_ALLOWED&#34;]
+            assert isinstance(reason, str)
+            return SignInUpNotAllowed(reason)
+
+        return SignInUpPostOkResult(
+            created_new_recipe_user=signinup_response.created_new_recipe_user,
+            user=post_auth_checks_result.user,
+            session=post_auth_checks_result.session,
+            oauth_tokens=oauth_tokens_to_use,
+            raw_user_info_from_provider=user_info.raw_user_info_from_provider,
+        )
+
+    async def apple_redirect_handler_post(
+        self,
+        form_post_info: Dict[str, Any],
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ):
+        state_in_b64: str = form_post_info[&#34;state&#34;]
+        state = b64decode(state_in_b64).decode(&#34;utf-8&#34;)
+        state_obj = json.loads(state)
+        redirect_uri: str = state_obj[&#34;frontendRedirectURI&#34;]
+
+        url_obj = urlparse(redirect_uri)
+        qparams = parse_qs(url_obj.query)
+        for k, v in form_post_info.items():
+            qparams[k] = [v]
+
+        redirect_uri = url_obj._replace(query=urlencode(qparams, doseq=True)).geturl()
+
+        api_options.response.set_header(&#34;Location&#34;, redirect_uri)
+        api_options.response.set_status_code(303)
+        api_options.response.set_html_content(&#34;&#34;)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -353,141 +578,22 @@ class APIImplementation(APIInterface):
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.thirdparty.api.implementation.APIImplementation.apple_redirect_handler_post"><code class="name flex">
-<span>async def <span class="ident">apple_redirect_handler_post</span></span>(<span>self, code: str, state: str, api_options: APIOptions, user_context: Dict[str, Any])</span>
+<span>async def <span class="ident">apple_redirect_handler_post</span></span>(<span>self, form_post_info: Dict[str, Any], api_options: APIOptions, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def apple_redirect_handler_post(self, code: str, state: str, api_options: APIOptions, user_context: Dict[str, Any]):
-    app_info = api_options.app_info
-    redirect_uri = app_info.website_domain.get_as_string_dangerous(
-    ) + app_info.website_base_path.get_as_string_dangerous() + &#39;/callback/apple?state=&#39; + state + &#39;&amp;code=&#39; + code
-    html_content = &#39;&lt;html&gt;&lt;head&gt;&lt;script&gt;window.location.replace(&#34;&#39; + \
-        redirect_uri + &#39;&#34;);&lt;/script&gt;&lt;/head&gt;&lt;/html&gt;&#39;
-    api_options.response.set_html_content(html_content)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.api.implementation.APIImplementation.authorisation_url_get"><code class="name flex">
-<span>async def <span class="ident">authorisation_url_get</span></span>(<span>self, provider: Provider, api_options: APIOptions, user_context: Dict[str, Any]) ‑> AuthorisationUrlGetResponse</span>
+<span>async def <span class="ident">authorisation_url_get</span></span>(<span>self, provider: Provider, redirect_uri_on_provider_dashboard: str, api_options: APIOptions, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def authorisation_url_get(self, provider: Provider, api_options: APIOptions, user_context: Dict[str, Any]) -&gt; AuthorisationUrlGetResponse:
-    authorisation_url_info = provider.get_authorisation_redirect_api_info(user_context)
-
-    params: Dict[str, str] = {}
-    for key, value in authorisation_url_info.params.items():
-        params[key] = value if not callable(
-            value) else value(api_options.request)
-
-    redirect_uri = provider.get_redirect_uri(user_context)
-    if redirect_uri is not None and not is_using_oauth_development_client_id(provider.client_id):
-        # the backend wants to set the redirectURI - so we set that here.
-        # we add the not development keys because the oauth provider will
-        # redirect to supertokens.io&#39;s URL which will redirect the app
-        # to the the user&#39;s website, which will handle the callback as usual.
-        # If we add this, then instead, the supertokens&#39; site will redirect
-        # the user to this API layer, which is not needed.
-        params[&#39;redirect_uri&#39;] = redirect_uri
-
-    auth_url = authorisation_url_info.url
-    if is_using_oauth_development_client_id(provider.client_id):
-        params[&#39;actual_redirect_uri&#39;] = authorisation_url_info.url
-
-        for k, v in params.items():
-            if v == provider.client_id:
-                params[k] = get_actual_client_id_from_development_client_id(
-                    provider.client_id)
-        auth_url = DEV_OAUTH_AUTHORIZATION_URL
-
-    query_string = urlencode(params)
-
-    url = auth_url + &#39;?&#39; + query_string
-    return AuthorisationUrlGetOkResponse(url)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.api.implementation.APIImplementation.sign_in_up_post"><code class="name flex">
-<span>async def <span class="ident">sign_in_up_post</span></span>(<span>self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: APIOptions, user_context: Dict[str, Any]) ‑> SignInUpPostResponse</span>
+<span>async def <span class="ident">sign_in_up_post</span></span>(<span>self, provider: Provider, redirect_uri_info: Optional[RedirectUriInfo], oauth_tokens: Optional[Dict[str, Any]], session: Optional[SessionContainer], should_try_linking_with_session_user: Union[bool, None], tenant_id: str, api_options: APIOptions, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def sign_in_up_post(self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: APIOptions, user_context: Dict[str, Any]) -&gt; SignInUpPostResponse:
-
-    redirect_uri_from_provider = provider.get_redirect_uri(user_context)
-    if is_using_oauth_development_client_id(provider.client_id):
-        redirect_uri = DEV_OAUTH_REDIRECT_URL
-    elif redirect_uri_from_provider is not None:
-        # we overwrite the redirectURI provided by the frontend
-        # since the backend wants to take charge of setting this.
-        redirect_uri = redirect_uri_from_provider
-    try:
-        if auth_code_response is None:
-            access_token_api_info = provider.get_access_token_api_info(
-                redirect_uri, code, user_context)
-            if is_using_oauth_development_client_id(provider.client_id):
-                for k, _ in access_token_api_info.params.items():
-                    if access_token_api_info.params[k] == provider.client_id:
-                        access_token_api_info.params[k] = get_actual_client_id_from_development_client_id(
-                            provider.client_id)
-            headers = {
-                &#39;Accept&#39;: &#39;application/json&#39;,
-                &#39;Content-Type&#39;: &#39;application/x-www-form-urlencoded&#39;
-            }
-            async with AsyncClient() as client:
-                access_token_response = await client.post(access_token_api_info.url, data=access_token_api_info.params, headers=headers)  # type: ignore
-                access_token_response = access_token_response.json()
-        else:
-            access_token_response = auth_code_response
-    except Exception as e:
-        raise_general_exception(e)
-
-    user_info: UserInfo
-    try:
-        user_info = await provider.get_profile_info(access_token_response, user_context)
-    except Exception as e:
-        return SignInUpPostFieldErrorResponse(str(e))
-    email = user_info.email.id if user_info.email is not None else None
-    email_verified = user_info.email.is_verified if user_info.email is not None else None
-    if email is None or email_verified is None:
-        return SignInUpPostNoEmailGivenByProviderResponse()
-
-    signinup_response = await api_options.recipe_implementation.sign_in_up(provider.id, user_info.user_id, email, email_verified, user_context)
-
-    if signinup_response.is_field_error:
-        if signinup_response.error is None:
-            raise Exception(&#34;Should never come here&#34;)
-        return SignInUpPostFieldErrorResponse(signinup_response.error)
-
-    if signinup_response.user is None:
-        raise Exception(&#34;Should never come here&#34;)
-
-    if email_verified:
-        token_response = await api_options.email_verification_recipe_implementation.create_email_verification_token(user_id=signinup_response.user.user_id, email=signinup_response.user.email, user_context=user_context)
-
-        if token_response.is_ok:
-            if token_response.token is None:
-                raise Exception(&#34;Should never come here&#34;)
-            await api_options.email_verification_recipe_implementation.verify_email_using_token(token=token_response.token, user_context=user_context)
-
-    user = signinup_response.user
-    if user is None or signinup_response.created_new_user is None:
-        raise Exception(&#34;Should never come here&#34;)
-    session = await create_new_session(api_options.request, user.user_id, user_context)
-
-    return SignInUpPostOkResponse(
-        user, signinup_response.created_new_user, access_token_response, session)</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
@@ -495,7 +601,7 @@ class APIImplementation(APIInterface):
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -503,12 +609,6 @@ class APIImplementation(APIInterface):
 <li><h3>Super-module</h3>
 <ul>
 <li><code><a title="supertokens_python.recipe.thirdparty.api" href="index.html">supertokens_python.recipe.thirdparty.api</a></code></li>
-</ul>
-</li>
-<li><h3><a href="#header-functions">Functions</a></h3>
-<ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.api.implementation.get_actual_client_id_from_development_client_id" href="#supertokens_python.recipe.thirdparty.api.implementation.get_actual_client_id_from_development_client_id">get_actual_client_id_from_development_client_id</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.api.implementation.is_using_oauth_development_client_id" href="#supertokens_python.recipe.thirdparty.api.implementation.is_using_oauth_development_client_id">is_using_oauth_development_client_id</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
@@ -527,7 +627,7 @@ class APIImplementation(APIInterface):
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

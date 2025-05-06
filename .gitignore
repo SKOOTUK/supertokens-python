@@ -1,5 +1,6 @@
 .idea
 .pytest_cache
+.vscode/settings.json
 build
 dist
 supertokens_python.egg-info
@@ -9,6 +10,7 @@ apiPassword
 venv/
 .venv/
 env/
+./env/
 .env
 .DS_Store
 bin/
@@ -16,3 +18,5 @@ lib/
 pyvenv.cfg
 sqlite.db
 .mypy_cache/
+test-results/
+.ruff_cache/

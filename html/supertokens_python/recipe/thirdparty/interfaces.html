@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.thirdparty.interfaces API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -42,45 +42,68 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from ..emailverification.interfaces import \
-    RecipeInterface as EmailVerificationRecipeInterface
-
-from typing_extensions import Literal
-
-from .provider import Provider
+from ...types import APIResponse, GeneralErrorResponse, RecipeUserId, User
+from .provider import Provider, ProviderInput, RedirectUriInfo
 
 if TYPE_CHECKING:
+    from supertokens_python.auth_utils import LinkingToSessionUserFailedError
     from supertokens_python.framework import BaseRequest, BaseResponse
     from supertokens_python.recipe.session import SessionContainer
     from supertokens_python.supertokens import AppInfo
 
-    from .types import User
+    from .types import RawUserInfoFromProvider
     from .utils import ThirdPartyConfig
 
 
-class SignInUpResult(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;, &#39;FIELD_ERROR&#39;], user: Union[User, None] = None,
-                 created_new_user: Union[bool, None] = None, error: Union[str, None] = None):
-        self.status: Literal[&#39;OK&#39;, &#39;FIELD_ERROR&#39;] = status
-        self.is_ok: bool = False
-        self.is_field_error: bool = False
-        self.user: Union[User, None] = user
-        self.created_new_user: Union[bool, None] = created_new_user
-        self.error: Union[str, None] = error
+class SignInUpOkResult:
+    def __init__(
+        self,
+        user: User,
+        recipe_user_id: RecipeUserId,
+        created_new_recipe_user: bool,
+        oauth_tokens: Dict[str, Any],
+        raw_user_info_from_provider: RawUserInfoFromProvider,
+    ):
+        self.user = user
+        self.created_new_recipe_user = created_new_recipe_user
+        self.oauth_tokens = oauth_tokens
+        self.raw_user_info_from_provider = raw_user_info_from_provider
+        self.recipe_user_id = recipe_user_id
 
 
-class SignInUpOkResult(SignInUpResult):
-    def __init__(self, user: User, created_new_user: bool):
-        super().__init__(&#39;OK&#39;, user, created_new_user)
-        self.is_ok = True
+class ManuallyCreateOrUpdateUserOkResult:
+    def __init__(
+        self,
+        user: User,
+        recipe_user_id: RecipeUserId,
+        created_new_recipe_user: bool,
+    ):
+        self.user = user
+        self.recipe_user_id = recipe_user_id
+        self.created_new_recipe_user = created_new_recipe_user
 
 
-class SignInUpFieldErrorResult(SignInUpResult):
-    def __init__(self, error: str):
-        super().__init__(&#39;FIELD_ERROR&#39;, error=error)
-        self.is_field_error = True
+class GetProviderOkResult:
+    def __init__(self, provider: Provider):
+        self.provider = provider
+
+
+class SignInUpNotAllowed(APIResponse):
+    status: str = &#34;SIGN_IN_UP_NOT_ALLOWED&#34;
+    reason: str
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+    def to_json(self) -&gt; Dict[str, Any]:
+        return {&#34;status&#34;: self.status, &#34;reason&#34;: self.reason}
+
+
+class EmailChangeNotAllowedError:
+    def __init__(self, reason: str):
+        self.reason = reason
 
 
 class RecipeInterface(ABC):
@@ -88,150 +111,118 @@ class RecipeInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_user_by_id(self, user_id: str, user_context: Dict[str, Any]) -&gt; Union[User, None]:
+    async def manually_create_or_update_user(
+        self,
+        third_party_id: str,
+        third_party_user_id: str,
+        email: str,
+        is_verified: bool,
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[
+        ManuallyCreateOrUpdateUserOkResult,
+        LinkingToSessionUserFailedError,
+        SignInUpNotAllowed,
+        EmailChangeNotAllowedError,
+    ]:
         pass
 
     @abstractmethod
-    async def get_users_by_email(self, email: str, user_context: Dict[str, Any]) -&gt; List[User]:
+    async def sign_in_up(
+        self,
+        third_party_id: str,
+        third_party_user_id: str,
+        email: str,
+        is_verified: bool,
+        oauth_tokens: Dict[str, Any],
+        raw_user_info_from_provider: RawUserInfoFromProvider,
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[SignInUpOkResult, SignInUpNotAllowed, LinkingToSessionUserFailedError]:
         pass
 
     @abstractmethod
-    async def get_user_by_thirdparty_info(self, third_party_id: str, third_party_user_id: str,
-                                          user_context: Dict[str, Any]) -&gt; Union[User, None]:
-        pass
-
-    @abstractmethod
-    async def sign_in_up(self, third_party_id: str, third_party_user_id: str, email: str,
-                         email_verified: bool, user_context: Dict[str, Any]) -&gt; SignInUpResult:
+    async def get_provider(
+        self,
+        third_party_id: str,
+        client_type: Optional[str],
+        tenant_id: str,
+        user_context: Dict[str, Any],
+    ) -&gt; Optional[Provider]:
         pass
 
 
 class APIOptions:
-    def __init__(self, request: BaseRequest, response: BaseResponse, recipe_id: str,
-                 config: ThirdPartyConfig, recipe_implementation: RecipeInterface, providers: List[Provider], app_info: AppInfo, email_verification_recipe_implementation: EmailVerificationRecipeInterface):
+    def __init__(
+        self,
+        request: BaseRequest,
+        response: BaseResponse,
+        recipe_id: str,
+        config: ThirdPartyConfig,
+        recipe_implementation: RecipeInterface,
+        providers: List[ProviderInput],
+        app_info: AppInfo,
+    ):
         self.request: BaseRequest = request
         self.response: BaseResponse = response
         self.recipe_id: str = recipe_id
         self.config: ThirdPartyConfig = config
-        self.providers: List[Provider] = providers
+        self.providers: List[ProviderInput] = providers
         self.recipe_implementation: RecipeInterface = recipe_implementation
         self.app_info: AppInfo = app_info
-        self.email_verification_recipe_implementation: EmailVerificationRecipeInterface = email_verification_recipe_implementation
 
 
-class SignInUpPostResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;, &#39;NO_EMAIL_GIVEN_BY_PROVIDER&#39;, &#39;FIELD_ERROR&#39;], user: Union[User, None] = None,
-                 created_new_user: Union[bool, None] = None, auth_code_response: Union[Dict[str, Any], None] = None,
-                 error: Union[str, None] = None,
-                 session: Union[SessionContainer, None] = None):
-        self.type = &#39;thirdparty&#39;
-        self.status: Literal[&#39;OK&#39;, &#39;NO_EMAIL_GIVEN_BY_PROVIDER&#39;, &#39;FIELD_ERROR&#39;] = status
-        self.is_ok: bool = False
-        self.is_no_email_given_by_provider: bool = False
-        self.is_field_error: bool = False
-        self.user: Union[User, None] = user
-        self.created_new_user: Union[bool, None] = created_new_user
-        self.error: Union[str, None] = error
-        self.auth_code_response: Union[Dict[str, Any], None] = auth_code_response
-        self.session: Union[SessionContainer, None] = session
+class SignInUpPostOkResult(APIResponse):
+    status: str = &#34;OK&#34;
 
-    @abstractmethod
-    def to_json(self) -&gt; Dict[str, Any]:
-        pass
-
-
-class GeneratePasswordResetTokenResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;]):
-        self.status = status
-
-    @abstractmethod
-    def to_json(self):
-        pass
-
-
-class EmailExistsResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;], exists: bool):
-        self.status = status
-        self.exists = exists
-
-    @abstractmethod
-    def to_json(self):
-        pass
-
-
-class PasswordResetResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;,
-                 &#39;RESET_PASSWORD_INVALID_TOKEN_ERROR&#39;]):
-        self.status = status
-
-    @abstractmethod
-    def to_json(self):
-        pass
-
-
-class SignInUpPostOkResponse(SignInUpPostResponse):
-    def __init__(self, user: User, created_new_user: bool,
-                 auth_code_response: Dict[str, Any],
-                 session: SessionContainer):
-        super().__init__(&#39;OK&#39;, user, created_new_user, auth_code_response, session=session)
-        self.is_ok = True
+    def __init__(
+        self,
+        user: User,
+        created_new_recipe_user: bool,
+        session: SessionContainer,
+        oauth_tokens: Dict[str, Any],
+        raw_user_info_from_provider: RawUserInfoFromProvider,
+    ):
+        self.user = user
+        self.created_new_recipe_user = created_new_recipe_user
+        self.session = session
+        self.oauth_tokens = oauth_tokens
+        self.raw_user_info_from_provider = raw_user_info_from_provider
 
     def to_json(self) -&gt; Dict[str, Any]:
-        if self.user is None:
-            raise Exception(&#34;Should never come here&#34;)
         return {
-            &#39;status&#39;: self.status,
-            &#39;user&#39;: {
-                &#39;id&#39;: self.user.user_id,
-                &#39;email&#39;: self.user.email,
-                &#39;timeJoined&#39;: self.user.time_joined,
-                &#39;thirdParty&#39;: {
-                    &#39;id&#39;: self.user.third_party_info.id,
-                    &#39;userId&#39;: self.user.third_party_info.user_id
-                }
-            },
-            &#39;createdNewUser&#39;: self.created_new_user
+            &#34;status&#34;: self.status,
+            &#34;user&#34;: self.user.to_json(),
+            &#34;createdNewRecipeUser&#34;: self.created_new_recipe_user,
         }
 
 
-class SignInUpPostNoEmailGivenByProviderResponse(SignInUpPostResponse):
-    def __init__(self):
-        super().__init__(&#39;NO_EMAIL_GIVEN_BY_PROVIDER&#39;)
-        self.is_no_email_given_by_provider = True
+class SignInUpPostNoEmailGivenByProviderResponse(APIResponse):
+    status: str = &#34;NO_EMAIL_GIVEN_BY_PROVIDER&#34;
+
+    def to_json(self) -&gt; Dict[str, Any]:
+        return {&#34;status&#34;: self.status}
+
+
+class AuthorisationUrlGetOkResult(APIResponse):
+    status: str = &#34;OK&#34;
+
+    def __init__(
+        self, url_with_query_params: str, pkce_code_verifier: Optional[str] = None
+    ):
+        self.url_with_query_params = url_with_query_params
+        self.pkce_code_verifier = pkce_code_verifier
 
     def to_json(self):
         return {
-            &#39;status&#39;: self.status
+            &#34;status&#34;: self.status,
+            &#34;urlWithQueryParams&#34;: self.url_with_query_params,
+            &#34;pkceCodeVerifier&#34;: self.pkce_code_verifier,
         }
-
-
-class SignInUpPostFieldErrorResponse(SignInUpPostResponse):
-    def __init__(self, error: str):
-        super().__init__(&#39;FIELD_ERROR&#39;, error=error)
-        self.is_field_error = True
-
-    def to_json(self):
-        return {
-            &#39;status&#39;: self.status,
-            &#39;error&#39;: self.error
-        }
-
-
-class AuthorisationUrlGetResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;], url: str):
-        self.status = status
-        self.url = url
-
-    def to_json(self):
-        return {
-            &#39;status&#39;: self.status,
-            &#39;url&#39;: self.url
-        }
-
-
-class AuthorisationUrlGetOkResponse(AuthorisationUrlGetResponse):
-    def __init__(self, url: str):
-        super().__init__(&#39;OK&#39;, url)
 
 
 class APIInterface:
@@ -241,17 +232,41 @@ class APIInterface:
         self.disable_apple_redirect_handler_post = False
 
     @abstractmethod
-    async def authorisation_url_get(self, provider: Provider,
-                                    api_options: APIOptions, user_context: Dict[str, Any]) -&gt; AuthorisationUrlGetResponse:
+    async def authorisation_url_get(
+        self,
+        provider: Provider,
+        redirect_uri_on_provider_dashboard: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[AuthorisationUrlGetOkResult, GeneralErrorResponse]:
         pass
 
     @abstractmethod
-    async def sign_in_up_post(self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: APIOptions,
-                              user_context: Dict[str, Any]) -&gt; SignInUpPostResponse:
+    async def sign_in_up_post(
+        self,
+        provider: Provider,
+        redirect_uri_info: Optional[RedirectUriInfo],
+        oauth_tokens: Optional[Dict[str, Any]],
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[
+        SignInUpPostOkResult,
+        SignInUpPostNoEmailGivenByProviderResponse,
+        SignInUpNotAllowed,
+        GeneralErrorResponse,
+    ]:
         pass
 
     @abstractmethod
-    async def apple_redirect_handler_post(self, code: str, state: str, api_options: APIOptions, user_context: Dict[str, Any]):
+    async def apple_redirect_handler_post(
+        self,
+        form_post_info: Dict[str, Any],
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ):
         pass</code></pre>
 </details>
 </section>
@@ -280,17 +295,41 @@ class APIInterface:
         self.disable_apple_redirect_handler_post = False
 
     @abstractmethod
-    async def authorisation_url_get(self, provider: Provider,
-                                    api_options: APIOptions, user_context: Dict[str, Any]) -&gt; AuthorisationUrlGetResponse:
+    async def authorisation_url_get(
+        self,
+        provider: Provider,
+        redirect_uri_on_provider_dashboard: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[AuthorisationUrlGetOkResult, GeneralErrorResponse]:
         pass
 
     @abstractmethod
-    async def sign_in_up_post(self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: APIOptions,
-                              user_context: Dict[str, Any]) -&gt; SignInUpPostResponse:
+    async def sign_in_up_post(
+        self,
+        provider: Provider,
+        redirect_uri_info: Optional[RedirectUriInfo],
+        oauth_tokens: Optional[Dict[str, Any]],
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[
+        SignInUpPostOkResult,
+        SignInUpPostNoEmailGivenByProviderResponse,
+        SignInUpNotAllowed,
+        GeneralErrorResponse,
+    ]:
         pass
 
     @abstractmethod
-    async def apple_redirect_handler_post(self, code: str, state: str, api_options: APIOptions, user_context: Dict[str, Any]):
+    async def apple_redirect_handler_post(
+        self,
+        form_post_info: Dict[str, Any],
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ):
         pass</code></pre>
 </details>
 <h3>Subclasses</h3>
@@ -300,54 +339,28 @@ class APIInterface:
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.APIInterface.apple_redirect_handler_post"><code class="name flex">
-<span>async def <span class="ident">apple_redirect_handler_post</span></span>(<span>self, code: str, state: str, api_options: <a title="supertokens_python.recipe.thirdparty.interfaces.APIOptions" href="#supertokens_python.recipe.thirdparty.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any])</span>
+<span>async def <span class="ident">apple_redirect_handler_post</span></span>(<span>self, form_post_info: Dict[str, Any], api_options: <a title="supertokens_python.recipe.thirdparty.interfaces.APIOptions" href="#supertokens_python.recipe.thirdparty.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def apple_redirect_handler_post(self, code: str, state: str, api_options: APIOptions, user_context: Dict[str, Any]):
-    pass</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.APIInterface.authorisation_url_get"><code class="name flex">
-<span>async def <span class="ident">authorisation_url_get</span></span>(<span>self, provider: Provider, api_options: <a title="supertokens_python.recipe.thirdparty.interfaces.APIOptions" href="#supertokens_python.recipe.thirdparty.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse">AuthorisationUrlGetResponse</a></span>
+<span>async def <span class="ident">authorisation_url_get</span></span>(<span>self, provider: Provider, redirect_uri_on_provider_dashboard: str, api_options: <a title="supertokens_python.recipe.thirdparty.interfaces.APIOptions" href="#supertokens_python.recipe.thirdparty.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any]) ‑> Union[<a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult">AuthorisationUrlGetOkResult</a>, <a title="supertokens_python.types.GeneralErrorResponse" href="../../types.html#supertokens_python.types.GeneralErrorResponse">GeneralErrorResponse</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def authorisation_url_get(self, provider: Provider,
-                                api_options: APIOptions, user_context: Dict[str, Any]) -&gt; AuthorisationUrlGetResponse:
-    pass</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.APIInterface.sign_in_up_post"><code class="name flex">
-<span>async def <span class="ident">sign_in_up_post</span></span>(<span>self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: <a title="supertokens_python.recipe.thirdparty.interfaces.APIOptions" href="#supertokens_python.recipe.thirdparty.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse">SignInUpPostResponse</a></span>
+<span>async def <span class="ident">sign_in_up_post</span></span>(<span>self, provider: Provider, redirect_uri_info: Optional[RedirectUriInfo], oauth_tokens: Optional[Dict[str, Any]], session: Optional[SessionContainer], should_try_linking_with_session_user: Union[bool, None], tenant_id: str, api_options: <a title="supertokens_python.recipe.thirdparty.interfaces.APIOptions" href="#supertokens_python.recipe.thirdparty.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def sign_in_up_post(self, provider: Provider, code: str, redirect_uri: str, client_id: Union[str, None], auth_code_response: Union[Dict[str, Any], None], api_options: APIOptions,
-                          user_context: Dict[str, Any]) -&gt; SignInUpPostResponse:
-    pass</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.APIOptions"><code class="flex name class">
 <span>class <span class="ident">APIOptions</span></span>
-<span>(</span><span>request: BaseRequest, response: BaseResponse, recipe_id: str, config: ThirdPartyConfig, recipe_implementation: <a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface">RecipeInterface</a>, providers: List[Provider], app_info: AppInfo, email_verification_recipe_implementation: EmailVerificationRecipeInterface)</span>
+<span>(</span><span>request: BaseRequest, response: BaseResponse, recipe_id: str, config: ThirdPartyConfig, recipe_implementation: <a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface">RecipeInterface</a>, providers: List[ProviderInput], app_info: AppInfo)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -356,21 +369,28 @@ async def sign_in_up_post(self, provider: Provider, code: str, redirect_uri: str
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class APIOptions:
-    def __init__(self, request: BaseRequest, response: BaseResponse, recipe_id: str,
-                 config: ThirdPartyConfig, recipe_implementation: RecipeInterface, providers: List[Provider], app_info: AppInfo, email_verification_recipe_implementation: EmailVerificationRecipeInterface):
+    def __init__(
+        self,
+        request: BaseRequest,
+        response: BaseResponse,
+        recipe_id: str,
+        config: ThirdPartyConfig,
+        recipe_implementation: RecipeInterface,
+        providers: List[ProviderInput],
+        app_info: AppInfo,
+    ):
         self.request: BaseRequest = request
         self.response: BaseResponse = response
         self.recipe_id: str = recipe_id
         self.config: ThirdPartyConfig = config
-        self.providers: List[Provider] = providers
+        self.providers: List[ProviderInput] = providers
         self.recipe_implementation: RecipeInterface = recipe_implementation
-        self.app_info: AppInfo = app_info
-        self.email_verification_recipe_implementation: EmailVerificationRecipeInterface = email_verification_recipe_implementation</code></pre>
+        self.app_info: AppInfo = app_info</code></pre>
 </details>
 </dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResponse"><code class="flex name class">
-<span>class <span class="ident">AuthorisationUrlGetOkResponse</span></span>
-<span>(</span><span>url: str)</span>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult"><code class="flex name class">
+<span>class <span class="ident">AuthorisationUrlGetOkResult</span></span>
+<span>(</span><span>url_with_query_params: str, pkce_code_verifier: Optional[str] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Helper class that provides a standard way to create an ABC using
@@ -379,50 +399,47 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class AuthorisationUrlGetOkResponse(AuthorisationUrlGetResponse):
-    def __init__(self, url: str):
-        super().__init__(&#39;OK&#39;, url)</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse">AuthorisationUrlGetResponse</a></li>
-<li>abc.ABC</li>
-</ul>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse"><code class="flex name class">
-<span>class <span class="ident">AuthorisationUrlGetResponse</span></span>
-<span>(</span><span>status: "Literal['OK']", url: str)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class AuthorisationUrlGetResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;], url: str):
-        self.status = status
-        self.url = url
+<pre><code class="python">class AuthorisationUrlGetOkResult(APIResponse):
+    status: str = &#34;OK&#34;
+
+    def __init__(
+        self, url_with_query_params: str, pkce_code_verifier: Optional[str] = None
+    ):
+        self.url_with_query_params = url_with_query_params
+        self.pkce_code_verifier = pkce_code_verifier
 
     def to_json(self):
         return {
-            &#39;status&#39;: self.status,
-            &#39;url&#39;: self.url
+            &#34;status&#34;: self.status,
+            &#34;urlWithQueryParams&#34;: self.url_with_query_params,
+            &#34;pkceCodeVerifier&#34;: self.pkce_code_verifier,
         }</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
+<li><a title="supertokens_python.types.APIResponse" href="../../types.html#supertokens_python.types.APIResponse">APIResponse</a></li>
 <li>abc.ABC</li>
 </ul>
-<h3>Subclasses</h3>
-<ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResponse" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResponse">AuthorisationUrlGetOkResponse</a></li>
-</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult.status"><code class="name">var <span class="ident">status</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
 <h3>Methods</h3>
 <dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse.to_json"><code class="name flex">
+<dt id="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult.to_json"><code class="name flex">
 <span>def <span class="ident">to_json</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+</dd>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.EmailChangeNotAllowedError"><code class="flex name class">
+<span>class <span class="ident">EmailChangeNotAllowedError</span></span>
+<span>(</span><span>reason: str)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -430,43 +447,14 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def to_json(self):
-    return {
-        &#39;status&#39;: self.status,
-        &#39;url&#39;: self.url
-    }</code></pre>
+<pre><code class="python">class EmailChangeNotAllowedError:
+    def __init__(self, reason: str):
+        self.reason = reason</code></pre>
 </details>
 </dd>
-</dl>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.EmailExistsResponse"><code class="flex name class">
-<span>class <span class="ident">EmailExistsResponse</span></span>
-<span>(</span><span>status: "Literal['OK']", exists: bool)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class EmailExistsResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;], exists: bool):
-        self.status = status
-        self.exists = exists
-
-    @abstractmethod
-    def to_json(self):
-        pass</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>abc.ABC</li>
-</ul>
-<h3>Methods</h3>
-<dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.EmailExistsResponse.to_json"><code class="name flex">
-<span>def <span class="ident">to_json</span></span>(<span>self)</span>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.GetProviderOkResult"><code class="flex name class">
+<span>class <span class="ident">GetProviderOkResult</span></span>
+<span>(</span><span>provider: Provider)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -474,40 +462,14 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">@abstractmethod
-def to_json(self):
-    pass</code></pre>
+<pre><code class="python">class GetProviderOkResult:
+    def __init__(self, provider: Provider):
+        self.provider = provider</code></pre>
 </details>
 </dd>
-</dl>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.GeneratePasswordResetTokenResponse"><code class="flex name class">
-<span>class <span class="ident">GeneratePasswordResetTokenResponse</span></span>
-<span>(</span><span>status: "Literal['OK']")</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class GeneratePasswordResetTokenResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;]):
-        self.status = status
-
-    @abstractmethod
-    def to_json(self):
-        pass</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>abc.ABC</li>
-</ul>
-<h3>Methods</h3>
-<dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.GeneratePasswordResetTokenResponse.to_json"><code class="name flex">
-<span>def <span class="ident">to_json</span></span>(<span>self)</span>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.ManuallyCreateOrUpdateUserOkResult"><code class="flex name class">
+<span>class <span class="ident">ManuallyCreateOrUpdateUserOkResult</span></span>
+<span>(</span><span>user: User, recipe_user_id: RecipeUserId, created_new_recipe_user: bool)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -515,54 +477,17 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">@abstractmethod
-def to_json(self):
-    pass</code></pre>
+<pre><code class="python">class ManuallyCreateOrUpdateUserOkResult:
+    def __init__(
+        self,
+        user: User,
+        recipe_user_id: RecipeUserId,
+        created_new_recipe_user: bool,
+    ):
+        self.user = user
+        self.recipe_user_id = recipe_user_id
+        self.created_new_recipe_user = created_new_recipe_user</code></pre>
 </details>
-</dd>
-</dl>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.PasswordResetResponse"><code class="flex name class">
-<span>class <span class="ident">PasswordResetResponse</span></span>
-<span>(</span><span>status: "Literal['OK', 'RESET_PASSWORD_INVALID_TOKEN_ERROR']")</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class PasswordResetResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;,
-                 &#39;RESET_PASSWORD_INVALID_TOKEN_ERROR&#39;]):
-        self.status = status
-
-    @abstractmethod
-    def to_json(self):
-        pass</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>abc.ABC</li>
-</ul>
-<h3>Methods</h3>
-<dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.PasswordResetResponse.to_json"><code class="name flex">
-<span>def <span class="ident">to_json</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-def to_json(self):
-    pass</code></pre>
-</details>
-</dd>
-</dl>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface"><code class="flex name class">
 <span>class <span class="ident">RecipeInterface</span></span>
@@ -579,21 +504,48 @@ inheritance.</p></div>
         pass
 
     @abstractmethod
-    async def get_user_by_id(self, user_id: str, user_context: Dict[str, Any]) -&gt; Union[User, None]:
+    async def manually_create_or_update_user(
+        self,
+        third_party_id: str,
+        third_party_user_id: str,
+        email: str,
+        is_verified: bool,
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[
+        ManuallyCreateOrUpdateUserOkResult,
+        LinkingToSessionUserFailedError,
+        SignInUpNotAllowed,
+        EmailChangeNotAllowedError,
+    ]:
         pass
 
     @abstractmethod
-    async def get_users_by_email(self, email: str, user_context: Dict[str, Any]) -&gt; List[User]:
+    async def sign_in_up(
+        self,
+        third_party_id: str,
+        third_party_user_id: str,
+        email: str,
+        is_verified: bool,
+        oauth_tokens: Dict[str, Any],
+        raw_user_info_from_provider: RawUserInfoFromProvider,
+        session: Optional[SessionContainer],
+        should_try_linking_with_session_user: Union[bool, None],
+        tenant_id: str,
+        user_context: Dict[str, Any],
+    ) -&gt; Union[SignInUpOkResult, SignInUpNotAllowed, LinkingToSessionUserFailedError]:
         pass
 
     @abstractmethod
-    async def get_user_by_thirdparty_info(self, third_party_id: str, third_party_user_id: str,
-                                          user_context: Dict[str, Any]) -&gt; Union[User, None]:
-        pass
-
-    @abstractmethod
-    async def sign_in_up(self, third_party_id: str, third_party_user_id: str, email: str,
-                         email_verified: bool, user_context: Dict[str, Any]) -&gt; SignInUpResult:
+    async def get_provider(
+        self,
+        third_party_id: str,
+        client_type: Optional[str],
+        tenant_id: str,
+        user_context: Dict[str, Any],
+    ) -&gt; Optional[Provider]:
         pass</code></pre>
 </details>
 <h3>Ancestors</h3>
@@ -603,73 +555,32 @@ inheritance.</p></div>
 <h3>Subclasses</h3>
 <ul class="hlist">
 <li><a title="supertokens_python.recipe.thirdparty.recipe_implementation.RecipeImplementation" href="recipe_implementation.html#supertokens_python.recipe.thirdparty.recipe_implementation.RecipeImplementation">RecipeImplementation</a></li>
-<li><a title="supertokens_python.recipe.thirdpartyemailpassword.recipeimplementation.third_party_recipe_implementation.RecipeImplementation" href="../thirdpartyemailpassword/recipeimplementation/third_party_recipe_implementation.html#supertokens_python.recipe.thirdpartyemailpassword.recipeimplementation.third_party_recipe_implementation.RecipeImplementation">RecipeImplementation</a></li>
 </ul>
 <h3>Methods</h3>
 <dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_user_by_id"><code class="name flex">
-<span>async def <span class="ident">get_user_by_id</span></span>(<span>self, user_id: str, user_context: Dict[str, Any]) ‑> Union[User, None]</span>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_provider"><code class="name flex">
+<span>async def <span class="ident">get_provider</span></span>(<span>self, third_party_id: str, client_type: Optional[str], tenant_id: str, user_context: Dict[str, Any]) ‑> Optional[<a title="supertokens_python.recipe.thirdparty.provider.Provider" href="provider.html#supertokens_python.recipe.thirdparty.provider.Provider">Provider</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def get_user_by_id(self, user_id: str, user_context: Dict[str, Any]) -&gt; Union[User, None]:
-    pass</code></pre>
-</details>
 </dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_user_by_thirdparty_info"><code class="name flex">
-<span>async def <span class="ident">get_user_by_thirdparty_info</span></span>(<span>self, third_party_id: str, third_party_user_id: str, user_context: Dict[str, Any]) ‑> Union[User, None]</span>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.manually_create_or_update_user"><code class="name flex">
+<span>async def <span class="ident">manually_create_or_update_user</span></span>(<span>self, third_party_id: str, third_party_user_id: str, email: str, is_verified: bool, session: Optional[SessionContainer], should_try_linking_with_session_user: Union[bool, None], tenant_id: str, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def get_user_by_thirdparty_info(self, third_party_id: str, third_party_user_id: str,
-                                      user_context: Dict[str, Any]) -&gt; Union[User, None]:
-    pass</code></pre>
-</details>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_users_by_email"><code class="name flex">
-<span>async def <span class="ident">get_users_by_email</span></span>(<span>self, email: str, user_context: Dict[str, Any]) ‑> List[User]</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def get_users_by_email(self, email: str, user_context: Dict[str, Any]) -&gt; List[User]:
-    pass</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.sign_in_up"><code class="name flex">
-<span>async def <span class="ident">sign_in_up</span></span>(<span>self, third_party_id: str, third_party_user_id: str, email: str, email_verified: bool, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpResult">SignInUpResult</a></span>
+<span>async def <span class="ident">sign_in_up</span></span>(<span>self, third_party_id: str, third_party_user_id: str, email: str, is_verified: bool, oauth_tokens: Dict[str, Any], raw_user_info_from_provider: RawUserInfoFromProvider, session: Optional[SessionContainer], should_try_linking_with_session_user: Union[bool, None], tenant_id: str, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-async def sign_in_up(self, third_party_id: str, third_party_user_id: str, email: str,
-                     email_verified: bool, user_context: Dict[str, Any]) -&gt; SignInUpResult:
-    pass</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpFieldErrorResult"><code class="flex name class">
-<span>class <span class="ident">SignInUpFieldErrorResult</span></span>
-<span>(</span><span>error: str)</span>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed"><code class="flex name class">
+<span>class <span class="ident">SignInUpNotAllowed</span></span>
+<span>(</span><span>reason: str)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Helper class that provides a standard way to create an ABC using
@@ -678,70 +589,45 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class SignInUpFieldErrorResult(SignInUpResult):
-    def __init__(self, error: str):
-        super().__init__(&#39;FIELD_ERROR&#39;, error=error)
-        self.is_field_error = True</code></pre>
+<pre><code class="python">class SignInUpNotAllowed(APIResponse):
+    status: str = &#34;SIGN_IN_UP_NOT_ALLOWED&#34;
+    reason: str
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+    def to_json(self) -&gt; Dict[str, Any]:
+        return {&#34;status&#34;: self.status, &#34;reason&#34;: self.reason}</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpResult">SignInUpResult</a></li>
+<li><a title="supertokens_python.types.APIResponse" href="../../types.html#supertokens_python.types.APIResponse">APIResponse</a></li>
 <li>abc.ABC</li>
 </ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.reason"><code class="name">var <span class="ident">reason</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.status"><code class="name">var <span class="ident">status</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.to_json"><code class="name flex">
+<span>def <span class="ident">to_json</span></span>(<span>self) ‑> Dict[str, Any]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpOkResult"><code class="flex name class">
 <span>class <span class="ident">SignInUpOkResult</span></span>
-<span>(</span><span>user: User, created_new_user: bool)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class SignInUpOkResult(SignInUpResult):
-    def __init__(self, user: User, created_new_user: bool):
-        super().__init__(&#39;OK&#39;, user, created_new_user)
-        self.is_ok = True</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpResult">SignInUpResult</a></li>
-<li>abc.ABC</li>
-</ul>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse"><code class="flex name class">
-<span>class <span class="ident">SignInUpPostFieldErrorResponse</span></span>
-<span>(</span><span>error: str)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class SignInUpPostFieldErrorResponse(SignInUpPostResponse):
-    def __init__(self, error: str):
-        super().__init__(&#39;FIELD_ERROR&#39;, error=error)
-        self.is_field_error = True
-
-    def to_json(self):
-        return {
-            &#39;status&#39;: self.status,
-            &#39;error&#39;: self.error
-        }</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse">SignInUpPostResponse</a></li>
-<li>abc.ABC</li>
-</ul>
-<h3>Methods</h3>
-<dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse.to_json"><code class="name flex">
-<span>def <span class="ident">to_json</span></span>(<span>self)</span>
+<span>(</span><span>user: User, recipe_user_id: RecipeUserId, created_new_recipe_user: bool, oauth_tokens: Dict[str, Any], raw_user_info_from_provider: RawUserInfoFromProvider)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -749,14 +635,21 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def to_json(self):
-    return {
-        &#39;status&#39;: self.status,
-        &#39;error&#39;: self.error
-    }</code></pre>
+<pre><code class="python">class SignInUpOkResult:
+    def __init__(
+        self,
+        user: User,
+        recipe_user_id: RecipeUserId,
+        created_new_recipe_user: bool,
+        oauth_tokens: Dict[str, Any],
+        raw_user_info_from_provider: RawUserInfoFromProvider,
+    ):
+        self.user = user
+        self.created_new_recipe_user = created_new_recipe_user
+        self.oauth_tokens = oauth_tokens
+        self.raw_user_info_from_provider = raw_user_info_from_provider
+        self.recipe_user_id = recipe_user_id</code></pre>
 </details>
-</dd>
-</dl>
 </dd>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse"><code class="flex name class">
 <span>class <span class="ident">SignInUpPostNoEmailGivenByProviderResponse</span></span>
@@ -768,43 +661,37 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class SignInUpPostNoEmailGivenByProviderResponse(SignInUpPostResponse):
-    def __init__(self):
-        super().__init__(&#39;NO_EMAIL_GIVEN_BY_PROVIDER&#39;)
-        self.is_no_email_given_by_provider = True
+<pre><code class="python">class SignInUpPostNoEmailGivenByProviderResponse(APIResponse):
+    status: str = &#34;NO_EMAIL_GIVEN_BY_PROVIDER&#34;
 
-    def to_json(self):
-        return {
-            &#39;status&#39;: self.status
-        }</code></pre>
+    def to_json(self) -&gt; Dict[str, Any]:
+        return {&#34;status&#34;: self.status}</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse">SignInUpPostResponse</a></li>
+<li><a title="supertokens_python.types.APIResponse" href="../../types.html#supertokens_python.types.APIResponse">APIResponse</a></li>
 <li>abc.ABC</li>
 </ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse.status"><code class="name">var <span class="ident">status</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse.to_json"><code class="name flex">
-<span>def <span class="ident">to_json</span></span>(<span>self)</span>
+<span>def <span class="ident">to_json</span></span>(<span>self) ‑> Dict[str, Any]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def to_json(self):
-    return {
-        &#39;status&#39;: self.status
-    }</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse"><code class="flex name class">
-<span>class <span class="ident">SignInUpPostOkResponse</span></span>
-<span>(</span><span>user: User, created_new_user: bool, auth_code_response: Dict[str, Any], session: SessionContainer)</span>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult"><code class="flex name class">
+<span>class <span class="ident">SignInUpPostOkResult</span></span>
+<span>(</span><span>user: User, created_new_recipe_user: bool, session: SessionContainer, oauth_tokens: Dict[str, Any], raw_user_info_from_provider: RawUserInfoFromProvider)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Helper class that provides a standard way to create an ABC using
@@ -813,161 +700,57 @@ inheritance.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class SignInUpPostOkResponse(SignInUpPostResponse):
-    def __init__(self, user: User, created_new_user: bool,
-                 auth_code_response: Dict[str, Any],
-                 session: SessionContainer):
-        super().__init__(&#39;OK&#39;, user, created_new_user, auth_code_response, session=session)
-        self.is_ok = True
+<pre><code class="python">class SignInUpPostOkResult(APIResponse):
+    status: str = &#34;OK&#34;
+
+    def __init__(
+        self,
+        user: User,
+        created_new_recipe_user: bool,
+        session: SessionContainer,
+        oauth_tokens: Dict[str, Any],
+        raw_user_info_from_provider: RawUserInfoFromProvider,
+    ):
+        self.user = user
+        self.created_new_recipe_user = created_new_recipe_user
+        self.session = session
+        self.oauth_tokens = oauth_tokens
+        self.raw_user_info_from_provider = raw_user_info_from_provider
 
     def to_json(self) -&gt; Dict[str, Any]:
-        if self.user is None:
-            raise Exception(&#34;Should never come here&#34;)
         return {
-            &#39;status&#39;: self.status,
-            &#39;user&#39;: {
-                &#39;id&#39;: self.user.user_id,
-                &#39;email&#39;: self.user.email,
-                &#39;timeJoined&#39;: self.user.time_joined,
-                &#39;thirdParty&#39;: {
-                    &#39;id&#39;: self.user.third_party_info.id,
-                    &#39;userId&#39;: self.user.third_party_info.user_id
-                }
-            },
-            &#39;createdNewUser&#39;: self.created_new_user
+            &#34;status&#34;: self.status,
+            &#34;user&#34;: self.user.to_json(),
+            &#34;createdNewRecipeUser&#34;: self.created_new_recipe_user,
         }</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse">SignInUpPostResponse</a></li>
+<li><a title="supertokens_python.types.APIResponse" href="../../types.html#supertokens_python.types.APIResponse">APIResponse</a></li>
 <li>abc.ABC</li>
 </ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult.status"><code class="name">var <span class="ident">status</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
 <h3>Methods</h3>
 <dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse.to_json"><code class="name flex">
+<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult.to_json"><code class="name flex">
 <span>def <span class="ident">to_json</span></span>(<span>self) ‑> Dict[str, Any]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def to_json(self) -&gt; Dict[str, Any]:
-    if self.user is None:
-        raise Exception(&#34;Should never come here&#34;)
-    return {
-        &#39;status&#39;: self.status,
-        &#39;user&#39;: {
-            &#39;id&#39;: self.user.user_id,
-            &#39;email&#39;: self.user.email,
-            &#39;timeJoined&#39;: self.user.time_joined,
-            &#39;thirdParty&#39;: {
-                &#39;id&#39;: self.user.third_party_info.id,
-                &#39;userId&#39;: self.user.third_party_info.user_id
-            }
-        },
-        &#39;createdNewUser&#39;: self.created_new_user
-    }</code></pre>
-</details>
 </dd>
 </dl>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse"><code class="flex name class">
-<span>class <span class="ident">SignInUpPostResponse</span></span>
-<span>(</span><span>status: "Literal['OK', 'NO_EMAIL_GIVEN_BY_PROVIDER', 'FIELD_ERROR']", user: Union[User, None] = None, created_new_user: Union[bool, None] = None, auth_code_response: Union[Dict[str, Any], None] = None, error: Union[str, None] = None, session: Union[SessionContainer, None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class SignInUpPostResponse(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;, &#39;NO_EMAIL_GIVEN_BY_PROVIDER&#39;, &#39;FIELD_ERROR&#39;], user: Union[User, None] = None,
-                 created_new_user: Union[bool, None] = None, auth_code_response: Union[Dict[str, Any], None] = None,
-                 error: Union[str, None] = None,
-                 session: Union[SessionContainer, None] = None):
-        self.type = &#39;thirdparty&#39;
-        self.status: Literal[&#39;OK&#39;, &#39;NO_EMAIL_GIVEN_BY_PROVIDER&#39;, &#39;FIELD_ERROR&#39;] = status
-        self.is_ok: bool = False
-        self.is_no_email_given_by_provider: bool = False
-        self.is_field_error: bool = False
-        self.user: Union[User, None] = user
-        self.created_new_user: Union[bool, None] = created_new_user
-        self.error: Union[str, None] = error
-        self.auth_code_response: Union[Dict[str, Any], None] = auth_code_response
-        self.session: Union[SessionContainer, None] = session
-
-    @abstractmethod
-    def to_json(self) -&gt; Dict[str, Any]:
-        pass</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>abc.ABC</li>
-</ul>
-<h3>Subclasses</h3>
-<ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse">SignInUpPostFieldErrorResponse</a></li>
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse">SignInUpPostNoEmailGivenByProviderResponse</a></li>
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse">SignInUpPostOkResponse</a></li>
-</ul>
-<h3>Methods</h3>
-<dl>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse.to_json"><code class="name flex">
-<span>def <span class="ident">to_json</span></span>(<span>self) ‑> Dict[str, Any]</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@abstractmethod
-def to_json(self) -&gt; Dict[str, Any]:
-    pass</code></pre>
-</details>
-</dd>
-</dl>
-</dd>
-<dt id="supertokens_python.recipe.thirdparty.interfaces.SignInUpResult"><code class="flex name class">
-<span>class <span class="ident">SignInUpResult</span></span>
-<span>(</span><span>status: "Literal['OK', 'FIELD_ERROR']", user: Union[User, None] = None, created_new_user: Union[bool, None] = None, error: Union[str, None] = None)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Helper class that provides a standard way to create an ABC using
-inheritance.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class SignInUpResult(ABC):
-    def __init__(self, status: Literal[&#39;OK&#39;, &#39;FIELD_ERROR&#39;], user: Union[User, None] = None,
-                 created_new_user: Union[bool, None] = None, error: Union[str, None] = None):
-        self.status: Literal[&#39;OK&#39;, &#39;FIELD_ERROR&#39;] = status
-        self.is_ok: bool = False
-        self.is_field_error: bool = False
-        self.user: Union[User, None] = user
-        self.created_new_user: Union[bool, None] = created_new_user
-        self.error: Union[str, None] = error</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>abc.ABC</li>
-</ul>
-<h3>Subclasses</h3>
-<ul class="hlist">
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpFieldErrorResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpFieldErrorResult">SignInUpFieldErrorResult</a></li>
-<li><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpOkResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpOkResult">SignInUpOkResult</a></li>
-</ul>
 </dd>
 </dl>
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -991,73 +774,53 @@ inheritance.</p></div>
 <h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.APIOptions" href="#supertokens_python.recipe.thirdparty.interfaces.APIOptions">APIOptions</a></code></h4>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResponse" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResponse">AuthorisationUrlGetOkResponse</a></code></h4>
-</li>
-<li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse">AuthorisationUrlGetResponse</a></code></h4>
+<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult">AuthorisationUrlGetOkResult</a></code></h4>
 <ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetResponse.to_json">to_json</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult.status" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult.status">status</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.AuthorisationUrlGetOkResult.to_json">to_json</a></code></li>
 </ul>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.EmailExistsResponse" href="#supertokens_python.recipe.thirdparty.interfaces.EmailExistsResponse">EmailExistsResponse</a></code></h4>
-<ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.EmailExistsResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.EmailExistsResponse.to_json">to_json</a></code></li>
-</ul>
+<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.EmailChangeNotAllowedError" href="#supertokens_python.recipe.thirdparty.interfaces.EmailChangeNotAllowedError">EmailChangeNotAllowedError</a></code></h4>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.GeneratePasswordResetTokenResponse" href="#supertokens_python.recipe.thirdparty.interfaces.GeneratePasswordResetTokenResponse">GeneratePasswordResetTokenResponse</a></code></h4>
-<ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.GeneratePasswordResetTokenResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.GeneratePasswordResetTokenResponse.to_json">to_json</a></code></li>
-</ul>
+<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.GetProviderOkResult" href="#supertokens_python.recipe.thirdparty.interfaces.GetProviderOkResult">GetProviderOkResult</a></code></h4>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.PasswordResetResponse" href="#supertokens_python.recipe.thirdparty.interfaces.PasswordResetResponse">PasswordResetResponse</a></code></h4>
-<ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.PasswordResetResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.PasswordResetResponse.to_json">to_json</a></code></li>
-</ul>
+<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.ManuallyCreateOrUpdateUserOkResult" href="#supertokens_python.recipe.thirdparty.interfaces.ManuallyCreateOrUpdateUserOkResult">ManuallyCreateOrUpdateUserOkResult</a></code></h4>
 </li>
 <li>
 <h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface">RecipeInterface</a></code></h4>
 <ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_user_by_id" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_user_by_id">get_user_by_id</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_user_by_thirdparty_info" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_user_by_thirdparty_info">get_user_by_thirdparty_info</a></code></li>
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_users_by_email" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_users_by_email">get_users_by_email</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_provider" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.get_provider">get_provider</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.manually_create_or_update_user" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.manually_create_or_update_user">manually_create_or_update_user</a></code></li>
 <li><code><a title="supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.sign_in_up" href="#supertokens_python.recipe.thirdparty.interfaces.RecipeInterface.sign_in_up">sign_in_up</a></code></li>
 </ul>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpFieldErrorResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpFieldErrorResult">SignInUpFieldErrorResult</a></code></h4>
+<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed">SignInUpNotAllowed</a></code></h4>
+<ul class="">
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.reason" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.reason">reason</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.status" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.status">status</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpNotAllowed.to_json">to_json</a></code></li>
+</ul>
 </li>
 <li>
 <h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpOkResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpOkResult">SignInUpOkResult</a></code></h4>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse">SignInUpPostFieldErrorResponse</a></code></h4>
-<ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostFieldErrorResponse.to_json">to_json</a></code></li>
-</ul>
-</li>
-<li>
 <h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse">SignInUpPostNoEmailGivenByProviderResponse</a></code></h4>
 <ul class="">
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse.status" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse.status">status</a></code></li>
 <li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostNoEmailGivenByProviderResponse.to_json">to_json</a></code></li>
 </ul>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse">SignInUpPostOkResponse</a></code></h4>
+<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult">SignInUpPostOkResult</a></code></h4>
 <ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResponse.to_json">to_json</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult.status" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult.status">status</a></code></li>
+<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostOkResult.to_json">to_json</a></code></li>
 </ul>
-</li>
-<li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse">SignInUpPostResponse</a></code></h4>
-<ul class="">
-<li><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse.to_json" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpPostResponse.to_json">to_json</a></code></li>
-</ul>
-</li>
-<li>
-<h4><code><a title="supertokens_python.recipe.thirdparty.interfaces.SignInUpResult" href="#supertokens_python.recipe.thirdparty.interfaces.SignInUpResult">SignInUpResult</a></code></h4>
 </li>
 </ul>
 </li>
@@ -1065,7 +828,7 @@ inheritance.</p></div>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

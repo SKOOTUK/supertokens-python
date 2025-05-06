@@ -18,8 +18,17 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Union
 
 from typing_extensions import Literal
 
+from supertokens_python.ingredients.emaildelivery.types import EmailDeliveryConfig
+from supertokens_python.ingredients.smsdelivery.types import SMSDeliveryConfig
+from supertokens_python.recipe.passwordless.types import (
+    EmailTemplateVars,
+    SMSTemplateVars,
+)
+
+from . import types, utils
+from .emaildelivery import services as emaildelivery_services
 from .recipe import PasswordlessRecipe
-from . import utils
+from .smsdelivery import services as smsdelivery_services
 
 if TYPE_CHECKING:
     from supertokens_python.supertokens import AppInfo
@@ -30,20 +39,36 @@ InputOverrideConfig = utils.OverrideConfig
 ContactEmailOnlyConfig = utils.ContactEmailOnlyConfig
 ContactConfig = utils.ContactConfig
 PhoneOrEmailInput = utils.PhoneOrEmailInput
-CreateAndSendCustomTextMessageParameters = utils.CreateAndSendCustomTextMessageParameters
-CreateAndSendCustomEmailParameters = utils.CreateAndSendCustomEmailParameters
+CreateAndSendCustomTextMessageParameters = (
+    types.CreateAndSendCustomTextMessageParameters
+)
+CreateAndSendCustomEmailParameters = types.CreateAndSendCustomEmailParameters
 ContactPhoneOnlyConfig = utils.ContactPhoneOnlyConfig
 ContactEmailOrPhoneConfig = utils.ContactEmailOrPhoneConfig
+SMTPService = emaildelivery_services.SMTPService
+TwilioService = smsdelivery_services.TwilioService
+SuperTokensSMSService = smsdelivery_services.SuperTokensSMSService
+EmailDeliveryInterface = types.EmailDeliveryInterface
+SMSDeliveryInterface = types.SMSDeliveryInterface
 
 
-def init(contact_config: ContactConfig,
-         flow_type: Literal['USER_INPUT_CODE', 'MAGIC_LINK', 'USER_INPUT_CODE_AND_MAGIC_LINK'],
-         override: Union[InputOverrideConfig, None] = None,
-         get_link_domain_and_path: Union[Callable[[
-             PhoneOrEmailInput, Dict[str, Any]], Awaitable[str]], None] = None,
-         get_custom_user_input_code: Union[Callable[[Dict[str, Any]], Awaitable[str]], None] = None) -> Callable[[AppInfo], RecipeModule]:
-    return PasswordlessRecipe.init(contact_config,
-                                   flow_type,
-                                   override,
-                                   get_link_domain_and_path,
-                                   get_custom_user_input_code)
+def init(
+    contact_config: ContactConfig,
+    flow_type: Literal[
+        "USER_INPUT_CODE", "MAGIC_LINK", "USER_INPUT_CODE_AND_MAGIC_LINK"
+    ],
+    override: Union[InputOverrideConfig, None] = None,
+    get_custom_user_input_code: Union[
+        Callable[[str, Dict[str, Any]], Awaitable[str]], None
+    ] = None,
+    email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None,
+    sms_delivery: Union[SMSDeliveryConfig[SMSTemplateVars], None] = None,
+) -> Callable[[AppInfo], RecipeModule]:
+    return PasswordlessRecipe.init(
+        contact_config,
+        flow_type,
+        override,
+        get_custom_user_input_code,
+        email_delivery,
+        sms_delivery,
+    )

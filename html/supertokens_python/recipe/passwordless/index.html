@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.passwordless API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -46,8 +46,17 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Union
 
 from typing_extensions import Literal
 
+from supertokens_python.ingredients.emaildelivery.types import EmailDeliveryConfig
+from supertokens_python.ingredients.smsdelivery.types import SMSDeliveryConfig
+from supertokens_python.recipe.passwordless.types import (
+    EmailTemplateVars,
+    SMSTemplateVars,
+)
+
+from . import types, utils
+from .emaildelivery import services as emaildelivery_services
 from .recipe import PasswordlessRecipe
-from . import utils
+from .smsdelivery import services as smsdelivery_services
 
 if TYPE_CHECKING:
     from supertokens_python.supertokens import AppInfo
@@ -58,23 +67,39 @@ InputOverrideConfig = utils.OverrideConfig
 ContactEmailOnlyConfig = utils.ContactEmailOnlyConfig
 ContactConfig = utils.ContactConfig
 PhoneOrEmailInput = utils.PhoneOrEmailInput
-CreateAndSendCustomTextMessageParameters = utils.CreateAndSendCustomTextMessageParameters
-CreateAndSendCustomEmailParameters = utils.CreateAndSendCustomEmailParameters
+CreateAndSendCustomTextMessageParameters = (
+    types.CreateAndSendCustomTextMessageParameters
+)
+CreateAndSendCustomEmailParameters = types.CreateAndSendCustomEmailParameters
 ContactPhoneOnlyConfig = utils.ContactPhoneOnlyConfig
 ContactEmailOrPhoneConfig = utils.ContactEmailOrPhoneConfig
+SMTPService = emaildelivery_services.SMTPService
+TwilioService = smsdelivery_services.TwilioService
+SuperTokensSMSService = smsdelivery_services.SuperTokensSMSService
+EmailDeliveryInterface = types.EmailDeliveryInterface
+SMSDeliveryInterface = types.SMSDeliveryInterface
 
 
-def init(contact_config: ContactConfig,
-         flow_type: Literal[&#39;USER_INPUT_CODE&#39;, &#39;MAGIC_LINK&#39;, &#39;USER_INPUT_CODE_AND_MAGIC_LINK&#39;],
-         override: Union[InputOverrideConfig, None] = None,
-         get_link_domain_and_path: Union[Callable[[
-             PhoneOrEmailInput, Dict[str, Any]], Awaitable[str]], None] = None,
-         get_custom_user_input_code: Union[Callable[[Dict[str, Any]], Awaitable[str]], None] = None) -&gt; Callable[[AppInfo], RecipeModule]:
-    return PasswordlessRecipe.init(contact_config,
-                                   flow_type,
-                                   override,
-                                   get_link_domain_and_path,
-                                   get_custom_user_input_code)</code></pre>
+def init(
+    contact_config: ContactConfig,
+    flow_type: Literal[
+        &#34;USER_INPUT_CODE&#34;, &#34;MAGIC_LINK&#34;, &#34;USER_INPUT_CODE_AND_MAGIC_LINK&#34;
+    ],
+    override: Union[InputOverrideConfig, None] = None,
+    get_custom_user_input_code: Union[
+        Callable[[str, Dict[str, Any]], Awaitable[str]], None
+    ] = None,
+    email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None,
+    sms_delivery: Union[SMSDeliveryConfig[SMSTemplateVars], None] = None,
+) -&gt; Callable[[AppInfo], RecipeModule]:
+    return PasswordlessRecipe.init(
+        contact_config,
+        flow_type,
+        override,
+        get_custom_user_input_code,
+        email_delivery,
+        sms_delivery,
+    )</code></pre>
 </details>
 </section>
 <section>
@@ -92,6 +117,10 @@ def init(contact_config: ContactConfig,
 <dd>
 <div class="desc"></div>
 </dd>
+<dt><code class="name"><a title="supertokens_python.recipe.passwordless.emaildelivery" href="emaildelivery/index.html">supertokens_python.recipe.passwordless.emaildelivery</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
 <dt><code class="name"><a title="supertokens_python.recipe.passwordless.exceptions" href="exceptions.html">supertokens_python.recipe.passwordless.exceptions</a></code></dt>
 <dd>
 <div class="desc"></div>
@@ -105,6 +134,10 @@ def init(contact_config: ContactConfig,
 <div class="desc"></div>
 </dd>
 <dt><code class="name"><a title="supertokens_python.recipe.passwordless.recipe_implementation" href="recipe_implementation.html">supertokens_python.recipe.passwordless.recipe_implementation</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt><code class="name"><a title="supertokens_python.recipe.passwordless.smsdelivery" href="smsdelivery/index.html">supertokens_python.recipe.passwordless.smsdelivery</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -128,26 +161,10 @@ def init(contact_config: ContactConfig,
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="supertokens_python.recipe.passwordless.init"><code class="name flex">
-<span>def <span class="ident">init</span></span>(<span>contact_config: ContactConfig, flow_type: "Literal['USER_INPUT_CODE', 'MAGIC_LINK', 'USER_INPUT_CODE_AND_MAGIC_LINK']", override: Union[InputOverrideConfig, None] = None, get_link_domain_and_path: Union[Callable[[PhoneOrEmailInput, Dict[str, Any]], Awaitable[str]], None] = None, get_custom_user_input_code: Union[Callable[[Dict[str, Any]], Awaitable[str]], None] = None) ‑> Callable[[AppInfo], RecipeModule]</span>
+<span>def <span class="ident">init</span></span>(<span>contact_config: ContactConfig, flow_type: "Literal[('USER_INPUT_CODE', 'MAGIC_LINK', 'USER_INPUT_CODE_AND_MAGIC_LINK')]", override: Union[InputOverrideConfig, None] = None, get_custom_user_input_code: Union[Callable[[str, Dict[str, Any]], Awaitable[str]], None] = None, email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None, sms_delivery: Union[SMSDeliveryConfig[SMSTemplateVars], None] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def init(contact_config: ContactConfig,
-         flow_type: Literal[&#39;USER_INPUT_CODE&#39;, &#39;MAGIC_LINK&#39;, &#39;USER_INPUT_CODE_AND_MAGIC_LINK&#39;],
-         override: Union[InputOverrideConfig, None] = None,
-         get_link_domain_and_path: Union[Callable[[
-             PhoneOrEmailInput, Dict[str, Any]], Awaitable[str]], None] = None,
-         get_custom_user_input_code: Union[Callable[[Dict[str, Any]], Awaitable[str]], None] = None) -&gt; Callable[[AppInfo], RecipeModule]:
-    return PasswordlessRecipe.init(contact_config,
-                                   flow_type,
-                                   override,
-                                   get_link_domain_and_path,
-                                   get_custom_user_input_code)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -155,7 +172,7 @@ def init(contact_config: ContactConfig,
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -170,10 +187,12 @@ def init(contact_config: ContactConfig,
 <li><code><a title="supertokens_python.recipe.passwordless.api" href="api/index.html">supertokens_python.recipe.passwordless.api</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.asyncio" href="asyncio/index.html">supertokens_python.recipe.passwordless.asyncio</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.constants" href="constants.html">supertokens_python.recipe.passwordless.constants</a></code></li>
+<li><code><a title="supertokens_python.recipe.passwordless.emaildelivery" href="emaildelivery/index.html">supertokens_python.recipe.passwordless.emaildelivery</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.exceptions" href="exceptions.html">supertokens_python.recipe.passwordless.exceptions</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.interfaces" href="interfaces.html">supertokens_python.recipe.passwordless.interfaces</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.recipe" href="recipe.html">supertokens_python.recipe.passwordless.recipe</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.recipe_implementation" href="recipe_implementation.html">supertokens_python.recipe.passwordless.recipe_implementation</a></code></li>
+<li><code><a title="supertokens_python.recipe.passwordless.smsdelivery" href="smsdelivery/index.html">supertokens_python.recipe.passwordless.smsdelivery</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.syncio" href="syncio/index.html">supertokens_python.recipe.passwordless.syncio</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.types" href="types.html">supertokens_python.recipe.passwordless.types</a></code></li>
 <li><code><a title="supertokens_python.recipe.passwordless.utils" href="utils.html">supertokens_python.recipe.passwordless.utils</a></code></li>
@@ -188,7 +207,7 @@ def init(contact_config: ContactConfig,
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

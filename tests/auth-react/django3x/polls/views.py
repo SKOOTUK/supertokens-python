@@ -11,326 +11,492 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from typing_extensions import Literal
 import json
 import os
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 
-from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from httpx import AsyncClient
-from supertokens_python import (InputAppInfo, Supertokens, SupertokensConfig,
-                                init)
-from supertokens_python.recipe import (emailpassword, passwordless, session,
-                                       thirdparty, thirdpartyemailpassword)
-from supertokens_python.recipe.emailpassword import (EmailPasswordRecipe,
-                                                     InputFormField)
-from supertokens_python.recipe.emailpassword.types import User
-from supertokens_python.recipe.emailverification import EmailVerificationRecipe
-from supertokens_python.recipe.jwt import JWTRecipe
-from supertokens_python.recipe.passwordless import (
-    ContactEmailOnlyConfig, ContactEmailOrPhoneConfig, ContactPhoneOnlyConfig,
-    CreateAndSendCustomEmailParameters,
-    CreateAndSendCustomTextMessageParameters, PasswordlessRecipe)
-from supertokens_python.recipe.session import SessionContainer, SessionRecipe
-from supertokens_python.recipe.thirdparty import ThirdPartyRecipe
-from supertokens_python.recipe.thirdparty.provider import Provider
-from supertokens_python.recipe.thirdparty.types import (
-    AccessTokenAPI, AuthorisationRedirectAPI, UserInfo, UserInfoEmail)
-from supertokens_python.recipe.thirdpartyemailpassword import (
-    Facebook, Github, Google, ThirdPartyEmailPasswordRecipe)
+from mysite.store import get_codes, get_url_with_token
+from mysite.utils import custom_init
+from supertokens_python import convert_to_recipe_user_id
+from supertokens_python.asyncio import get_user
+from supertokens_python.auth_utils import LinkingToSessionUserFailedError
+from supertokens_python.recipe.emailpassword.asyncio import update_email_or_password
+from supertokens_python.recipe.emailpassword.interfaces import (
+    EmailAlreadyExistsError,
+    UnknownUserIdError,
+    UpdateEmailOrPasswordEmailChangeNotAllowedError,
+    UpdateEmailOrPasswordOkResult,
+)
+from supertokens_python.recipe.emailverification import EmailVerificationClaim
+from supertokens_python.recipe.multifactorauth.asyncio import (
+    add_to_required_secondary_factors_for_user,
+)
+from supertokens_python.recipe.multitenancy.asyncio import (
+    associate_user_to_tenant,
+    create_or_update_tenant,
+    create_or_update_third_party_config,
+    delete_tenant,
+    disassociate_user_from_tenant,
+)
+from supertokens_python.recipe.multitenancy.interfaces import (
+    AssociateUserToTenantEmailAlreadyExistsError,
+    AssociateUserToTenantOkResult,
+    AssociateUserToTenantPhoneNumberAlreadyExistsError,
+    AssociateUserToTenantThirdPartyUserAlreadyExistsError,
+    AssociateUserToTenantUnknownUserIdError,
+    TenantConfigCreateOrUpdate,
+)
+from supertokens_python.recipe.oauth2provider.interfaces import CreateOAuth2ClientInput
+from supertokens_python.recipe.oauth2provider.syncio import create_oauth2_client
+from supertokens_python.recipe.passwordless.asyncio import update_user
+from supertokens_python.recipe.passwordless.interfaces import (
+    EmailChangeNotAllowedError,
+    UpdateUserEmailAlreadyExistsError,
+    UpdateUserOkResult,
+    UpdateUserPhoneNumberAlreadyExistsError,
+    UpdateUserUnknownUserIdError,
+)
+from supertokens_python.recipe.session import SessionContainer
+from supertokens_python.recipe.session.interfaces import SessionClaimValidator
+from supertokens_python.recipe.thirdparty import ProviderConfig
+from supertokens_python.recipe.thirdparty.asyncio import manually_create_or_update_user
+from supertokens_python.recipe.thirdparty.interfaces import (
+    ManuallyCreateOrUpdateUserOkResult,
+    SignInUpNotAllowed,
+)
+from supertokens_python.recipe.userroles import PermissionClaim, UserRoleClaim
+from supertokens_python.types import AccountInfo, RecipeUserId
 
-mode = os.environ.get('APP_MODE', 'asgi')
-if mode == 'asgi':
-    from supertokens_python.recipe.session.framework.django.asyncio import \
-        verify_session
-else:
-    from supertokens_python.recipe.session.framework.django.syncio import \
-        verify_session
-
-
-class CustomAuth0Provider(Provider):
-    def __init__(self, client_id: str, client_secret: str, domain: str):
-        super().__init__('auth0', client_id, False)
-        self.domain = domain
-        self.client_secret = client_secret
-        self.authorisation_redirect_url = "https://" + self.domain + "/authorize"
-        self.access_token_api_url = "https://" + self.domain + "/oauth/token"
-
-    async def get_profile_info(self, auth_code_response: Dict[str, Any], user_context: Dict[str, Any]) -> UserInfo:
-        access_token: str = auth_code_response['access_token']
-        headers = {
-            'Authorization': 'Bearer ' + access_token,
-        }
-        async with AsyncClient() as client:
-            response = await client.get(url="https://" + self.domain + "/userinfo", headers=headers)
-            user_info = response.json()
-
-            return UserInfo(user_info['sub'], UserInfoEmail(
-                user_info['name'], True))
-
-    def get_authorisation_redirect_api_info(self, user_context: Dict[str, Any]) -> AuthorisationRedirectAPI:
-        params: Dict[str, Any] = {
-            'scope': 'openid profile',
-            'response_type': 'code',
-            'client_id': self.client_id,
-        }
-        return AuthorisationRedirectAPI(
-            self.authorisation_redirect_url, params)
-
-    def get_access_token_api_info(
-            self, redirect_uri: str, auth_code_from_request: str, user_context: Dict[str, Any]) -> AccessTokenAPI:
-        params = {
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
-            'grant_type': 'authorization_code',
-            'code': auth_code_from_request,
-            'redirect_uri': redirect_uri
-        }
-        return AccessTokenAPI(self.access_token_api_url, params)
-
-    def get_redirect_uri(self, user_context: Dict[str, Any]) -> Union[None, str]:
-        return None
+mode = os.environ.get("APP_MODE", "asgi")
 
 
-async def save_code_text(param: CreateAndSendCustomTextMessageParameters, _: Dict[str, Any]):
-    code_store: Union[None, Dict[str, List[Dict[str, Any]]]] = getattr(settings, "CODE_STORE", None)
-    codes: Union[None, List[Dict[str, Any]]] = []
-    if code_store is not None:
-        codes = code_store.get(param.pre_auth_session_id)
-    else:
-        code_store = dict()
-    if codes is None:
-        codes = []
-    codes.append({
-        'urlWithLinkCode': param.url_with_link_code,
-        'userInputCode': param.user_input_code
-    })
-    code_store[param.pre_auth_session_id] = codes
-    setattr(settings, "CODE_STORE", code_store)
+async def override_global_claim_validators(
+    gv: List[SessionClaimValidator],
+    _session: SessionContainer,
+    user_context: Dict[str, Any],
+):
+    validators = gv.copy()
+    req = user_context["_default"]["request"]
+    body = await req.json()
+
+    if body.get("role"):
+        info = body["role"]
+        validator = getattr(UserRoleClaim.validators, info["validator"])
+        validators.append(validator(*info["args"]))
+
+    if body.get("permission"):
+        info = body["permission"]
+        validator = getattr(PermissionClaim.validators, info["validator"])
+        validators.append(validator(*info["args"]))
+
+    return validators
 
 
-async def save_code_email(param: CreateAndSendCustomEmailParameters, _: Dict[str, Any]):
-    code_store: Union[None, Dict[str, List[Dict[str, Any]]]] = getattr(settings, "CODE_STORE", None)
-    codes: Union[None, List[Dict[str, Any]]] = []
-    if code_store is not None:
-        codes = code_store.get(param.pre_auth_session_id)
-    else:
-        code_store = dict()
-    if codes is None:
-        codes = []
-    codes.append({
-        'urlWithLinkCode': param.url_with_link_code,
-        'userInputCode': param.user_input_code
-    })
-    code_store[param.pre_auth_session_id] = codes
-    setattr(settings, "CODE_STORE", code_store)
-
-os.environ.setdefault('SUPERTOKENS_ENV', 'testing')
-
-
-async def create_and_send_custom_email(_: User, url_with_token: str, __: Dict[str, Any]) -> None:
-    setattr(settings, "LATEST_URL_WITH_TOKEN", url_with_token)
-
-
-async def validate_age(value: Any):
-    try:
-        if int(value) < 18:
-            return "You must be over 18 to register"
-    except Exception:
-        pass
-
-    return None
-
-form_fields = [
-    InputFormField('name'),
-    InputFormField('age', validate=validate_age),
-    InputFormField('country', optional=True)
-]
-
-
-def get_api_port():
-    return '8083'
-
-
-def get_website_port():
-    return '3031'
-
-
-def get_website_domain():
-    return 'http://localhost:' + get_website_port()
-
-
-def custom_init(contact_method: Union[None, Literal['PHONE', 'EMAIL', 'EMAIL_OR_PHONE']] = None,
-                flow_type: Union[None, Literal['USER_INPUT_CODE', 'MAGIC_LINK', 'USER_INPUT_CODE_AND_MAGIC_LINK']] = None):
-    PasswordlessRecipe.reset()
-    JWTRecipe.reset()
-    EmailVerificationRecipe.reset()
-    SessionRecipe.reset()
-    ThirdPartyRecipe.reset()
-    EmailPasswordRecipe.reset()
-    ThirdPartyEmailPasswordRecipe.reset()
-    Supertokens.reset()
-
-    if contact_method is not None and flow_type is not None:
-        if contact_method == 'PHONE':
-            passwordless_init = passwordless.init(
-                contact_config=ContactPhoneOnlyConfig(
-                    create_and_send_custom_text_message=save_code_text
-                ),
-                flow_type=flow_type
-            )
-        elif contact_method == 'EMAIL':
-            passwordless_init = passwordless.init(
-                contact_config=ContactEmailOnlyConfig(
-                    create_and_send_custom_email=save_code_email
-                ),
-                flow_type=flow_type
-            )
-        else:
-            passwordless_init = passwordless.init(
-                contact_config=ContactEmailOrPhoneConfig(
-                    create_and_send_custom_email=save_code_email,
-                    create_and_send_custom_text_message=save_code_text
-                ),
-                flow_type=flow_type
-            )
-    else:
-        passwordless_init = passwordless.init(
-            contact_config=ContactPhoneOnlyConfig(
-                create_and_send_custom_text_message=save_code_text
-            ),
-            flow_type='USER_INPUT_CODE_AND_MAGIC_LINK'
-        )
-
-    recipe_list = [
-        session.init(),
-        emailpassword.init(
-            sign_up_feature=emailpassword.InputSignUpFeature(form_fields),
-            reset_password_using_token_feature=emailpassword.InputResetPasswordUsingTokenFeature(
-                create_and_send_custom_email=create_and_send_custom_email
-            ),
-            email_verification_feature=emailpassword.InputEmailVerificationConfig(
-                create_and_send_custom_email=create_and_send_custom_email
-            )
-        ),
-        thirdparty.init(
-            sign_in_and_up_feature=thirdparty.SignInAndUpFeature([
-                Google(
-                    client_id=os.environ.get('GOOGLE_CLIENT_ID'),  # type: ignore
-                    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET')  # type: ignore
-                ), Facebook(
-                    client_id=os.environ.get('FACEBOOK_CLIENT_ID'),  # type: ignore
-                    client_secret=os.environ.get('FACEBOOK_CLIENT_SECRET')  # type: ignore
-                ), Github(
-                    client_id=os.environ.get('GITHUB_CLIENT_ID'),  # type: ignore
-                    client_secret=os.environ.get('GITHUB_CLIENT_SECRET')  # type: ignore
-                ), CustomAuth0Provider(
-                    client_id=os.environ.get('AUTH0_CLIENT_ID'),  # type: ignore
-                    domain=os.environ.get('AUTH0_DOMAIN'),  # type: ignore
-                    client_secret=os.environ.get('AUTH0_CLIENT_SECRET')  # type: ignore
-                )
-            ])
-        ),
-        thirdpartyemailpassword.init(
-            sign_up_feature=thirdpartyemailpassword.InputSignUpFeature(
-                form_fields),
-            providers=[
-                Google(
-                    client_id=os.environ.get('GOOGLE_CLIENT_ID'),  # type: ignore
-                    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET')  # type: ignore
-                ), Facebook(
-                    client_id=os.environ.get('FACEBOOK_CLIENT_ID'),  # type: ignore
-                    client_secret=os.environ.get('FACEBOOK_CLIENT_SECRET')  # type: ignore
-                ), Github(
-                    client_id=os.environ.get('GITHUB_CLIENT_ID'),  # type: ignore
-                    client_secret=os.environ.get('GITHUB_CLIENT_SECRET')  # type: ignore
-                ), CustomAuth0Provider(
-                    client_id=os.environ.get('AUTH0_CLIENT_ID'),  # type: ignore
-                    domain=os.environ.get('AUTH0_DOMAIN'),  # type: ignore
-                    client_secret=os.environ.get('AUTH0_CLIENT_SECRET')  # type: ignore
-                )
-            ]
-        ),
-        passwordless_init
-    ]
-    init(
-        supertokens_config=SupertokensConfig('http://localhost:9000'),
-        app_info=InputAppInfo(
-            app_name="SuperTokens Demo",
-            api_domain="0.0.0.0:" + get_api_port(),
-            website_domain=get_website_domain()
-        ),
-        framework='django',
-        mode=os.environ.get('APP_MODE', 'asgi'),  # type: ignore
-        recipe_list=recipe_list,
-        telemetry=False
+if mode == "asgi":
+    from supertokens_python.recipe.emailverification.asyncio import unverify_email
+    from supertokens_python.recipe.session.framework.django.asyncio import (
+        verify_session,
+    )
+    from supertokens_python.recipe.userroles.asyncio import (
+        add_role_to_user,
+        create_new_role_or_add_permissions,
     )
 
-
-if mode == 'asgi':
     @verify_session()
     async def session_info(request: HttpRequest):  # type: ignore
         session_: SessionContainer = request.supertokens  # type: ignore
-        return JsonResponse({
-            'sessionHandle': session_.get_handle(),
-            'userId': session_.get_user_id(),
-            'jwtPayload': session_.get_access_token_payload(),
-            'sessionData': await session_.get_session_data()
-        })
+        return JsonResponse(
+            {
+                "sessionHandle": session_.get_handle(),  # type: ignore
+                "userId": session_.get_user_id(),  # type: ignore
+                "jwtPayload": session_.get_access_token_payload(),  # type: ignore
+                "sessionDataFromDatabase": await session_.get_session_data_from_database(),  # type: ignore
+            }
+        )
+
+    @verify_session()
+    async def set_role_api(request: HttpRequest):
+        session_: SessionContainer = request.supertokens  # type: ignore
+        body = json.loads(request.body)
+        await create_new_role_or_add_permissions(body["role"], body["permissions"])
+        await add_role_to_user("public", session_.get_user_id(), body["role"])  # type: ignore
+        await session_.fetch_and_set_claim(UserRoleClaim)  # type: ignore
+        await session_.fetch_and_set_claim(PermissionClaim)  # type: ignore
+        return JsonResponse({"status": "OK"})
+
+    @verify_session()
+    async def unverify_email_api(request: HttpRequest):
+        session_: SessionContainer = request.supertokens  # type: ignore
+        await unverify_email(session_.get_recipe_user_id())  # type: ignore
+        await session_.fetch_and_set_claim(EmailVerificationClaim)  # type: ignore
+        return JsonResponse({"status": "OK"})
+
+    @verify_session(override_global_claim_validators=override_global_claim_validators)
+    async def check_role_api():  # type: ignore
+        return JsonResponse({"status": "OK"})
+
+    async def delete_user(request: HttpRequest):
+        from supertokens_python.asyncio import delete_user, list_users_by_account_info
+
+        body = json.loads(request.body)
+        user = await list_users_by_account_info(
+            "public", AccountInfo(email=body["email"])
+        )
+        if len(user) == 0:
+            raise Exception("Should not come here")
+        await delete_user(user[0].id)
+        return JsonResponse({"status": "OK"})
+
 else:
+    from supertokens_python.recipe.emailverification.syncio import (
+        unverify_email as sync_unverify_email,
+    )
+    from supertokens_python.recipe.session.framework.django.syncio import verify_session
+    from supertokens_python.recipe.userroles.syncio import (
+        add_role_to_user as sync_add_role_to_user,
+    )
+    from supertokens_python.recipe.userroles.syncio import (
+        create_new_role_or_add_permissions as sync_create_new_role_or_add_permissions,
+    )
+
     @verify_session()
     def session_info(request: HttpRequest):
         session_: SessionContainer = request.supertokens  # type: ignore
-        return JsonResponse({
-            'sessionHandle': session_.get_handle(),
-            'userId': session_.get_user_id(),
-            'accessTokenPayload': session_.get_access_token_payload(),
-            'sessionData': session_.sync_get_session_data()
-        })
+        return JsonResponse(
+            {
+                "sessionHandle": session_.get_handle(),  # type: ignore
+                "userId": session_.get_user_id(),  # type: ignore
+                "accessTokenPayload": session_.get_access_token_payload(),  # type: ignore
+                "sessionDataFromDatabase": session_.sync_get_session_data_from_database(),  # type: ignore
+            }
+        )
+
+    @verify_session()
+    def sync_set_role_api(request: HttpRequest):
+        session_: SessionContainer = request.supertokens  # type: ignore
+        body = json.loads(request.body)
+        sync_create_new_role_or_add_permissions(body["role"], body["permissions"])
+        sync_add_role_to_user("public", session_.get_user_id(), body["role"])  # type: ignore
+        session_.sync_fetch_and_set_claim(UserRoleClaim)  # type: ignore
+        session_.sync_fetch_and_set_claim(PermissionClaim)  # type: ignore
+        return JsonResponse({"status": "OK"})
+
+    @verify_session()
+    def sync_unverify_email_api(request: HttpRequest):
+        session_: SessionContainer = request.supertokens  # type: ignore
+        sync_unverify_email(session_.get_recipe_user_id())  # type: ignore
+        session_.sync_fetch_and_set_claim(EmailVerificationClaim)  # type: ignore
+        return JsonResponse({"status": "OK"})
+
+    def sync_delete_user(request: HttpRequest):
+        from supertokens_python.syncio import delete_user, list_users_by_account_info
+
+        body = json.loads(request.body)
+        user = list_users_by_account_info("public", AccountInfo(email=body["email"]))
+        if len(user) == 0:
+            raise Exception("Should not come here")
+        delete_user(user[0].id)
+        return JsonResponse({"status": "OK"})
+
+    @verify_session(override_global_claim_validators=override_global_claim_validators)
+    def sync_check_role_api():
+        return JsonResponse({"status": "OK"})
 
 
 def ping(request: HttpRequest):
-    return HttpResponse('success')
+    return HttpResponse("success")
 
 
 def token(request: HttpRequest):
-    latest_url_with_token = getattr(settings, "LATEST_URL_WITH_TOKEN", None)
-    return JsonResponse({
-        'latestURLWithToken': latest_url_with_token
-    })
+    latest_url_with_token = get_url_with_token()
+    return JsonResponse({"latestURLWithToken": latest_url_with_token})
 
 
 def test_get_device(request: HttpRequest):
-    pre_auth_session_id = request.GET.get('preAuthSessionId', None)
+    pre_auth_session_id = request.GET.get("preAuthSessionId", None)
     if pre_auth_session_id is None:
-        return HttpResponse('')
-    code_store = getattr(settings, "CODE_STORE", None)
-    codes = []
-    if code_store is not None:
-        codes = code_store.get(pre_auth_session_id)
-    if codes is None:
-        codes = []
-    return JsonResponse({
-        'preAuthSessionId': pre_auth_session_id,
-        'codes': codes
-    })
+        return HttpResponse("")
+    codes = get_codes(pre_auth_session_id)
+    return JsonResponse({"preAuthSessionId": pre_auth_session_id, "codes": codes})
 
 
-def test_set_flow(request: HttpRequest):
+async def change_email(request: HttpRequest):
     body = json.loads(request.body)
-    contact_method = body['contactMethod']
-    flow_type = body['flowType']
-    custom_init(contact_method=contact_method, flow_type=flow_type)
-    return HttpResponse('')
+    if body is None:
+        raise Exception("Should never come here")
+
+    if body["rid"] == "emailpassword":
+        resp = await update_email_or_password(
+            recipe_user_id=convert_to_recipe_user_id(body["recipeUserId"]),
+            email=body["email"],
+            tenant_id_for_password_policy=body["tenantId"],
+        )
+        if isinstance(resp, UpdateEmailOrPasswordOkResult):
+            return JsonResponse({"status": "OK"})
+        if isinstance(resp, EmailAlreadyExistsError):
+            return JsonResponse({"status": "EMAIL_ALREADY_EXISTS_ERROR"})
+        if isinstance(resp, UnknownUserIdError):
+            return JsonResponse({"status": "UNKNOWN_USER_ID_ERROR"})
+        if isinstance(resp, UpdateEmailOrPasswordEmailChangeNotAllowedError):
+            return JsonResponse(
+                {"status": "EMAIL_CHANGE_NOT_ALLOWED_ERROR", "reason": resp.reason}
+            )
+        return JsonResponse(resp.to_json())
+    elif body["rid"] == "thirdparty":
+        user = await get_user(user_id=body["recipeUserId"])
+        assert user is not None
+        login_method = next(
+            lm
+            for lm in user.login_methods
+            if lm.recipe_user_id.get_as_string() == body["recipeUserId"]
+        )
+        assert login_method is not None
+        assert login_method.third_party is not None
+        resp = await manually_create_or_update_user(
+            tenant_id=body["tenantId"],
+            third_party_id=login_method.third_party.id,
+            third_party_user_id=login_method.third_party.user_id,
+            email=body["email"],
+            is_verified=False,
+        )
+        if isinstance(resp, ManuallyCreateOrUpdateUserOkResult):
+            return JsonResponse(
+                {"status": "OK", "createdNewRecipeUser": resp.created_new_recipe_user}
+            )
+        if isinstance(resp, LinkingToSessionUserFailedError):
+            raise Exception("Should not come here")
+        if isinstance(resp, SignInUpNotAllowed):
+            return JsonResponse(
+                {"status": "SIGN_IN_UP_NOT_ALLOWED", "reason": resp.reason}
+            )
+        return JsonResponse(
+            {"status": "EMAIL_CHANGE_NOT_ALLOWED_ERROR", "reason": resp.reason}
+        )
+    elif body["rid"] == "passwordless":
+        resp = await update_user(
+            recipe_user_id=convert_to_recipe_user_id(body["recipeUserId"]),
+            email=body.get("email"),
+            phone_number=body.get("phoneNumber"),
+        )
+
+        if isinstance(resp, UpdateUserOkResult):
+            return JsonResponse({"status": "OK"})
+        if isinstance(resp, UpdateUserUnknownUserIdError):
+            return JsonResponse({"status": "UNKNOWN_USER_ID_ERROR"})
+        if isinstance(resp, UpdateUserEmailAlreadyExistsError):
+            return JsonResponse({"status": "EMAIL_ALREADY_EXISTS_ERROR"})
+        if isinstance(resp, UpdateUserPhoneNumberAlreadyExistsError):
+            return JsonResponse({"status": "PHONE_NUMBER_ALREADY_EXISTS_ERROR"})
+        if isinstance(resp, EmailChangeNotAllowedError):
+            return JsonResponse(
+                {"status": "EMAIL_CHANGE_NOT_ALLOWED_ERROR", "reason": resp.reason}
+            )
+        return JsonResponse(
+            {
+                "status": "PHONE_NUMBER_CHANGE_NOT_ALLOWED_ERROR",
+                "reason": resp.reason,
+            }
+        )
+
+    raise Exception("Should not come here")
+
+
+async def setup_tenant(request: HttpRequest):
+    body = json.loads(request.body)
+    if body is None:
+        raise Exception("Should never come here")
+    tenant_id = body["tenantId"]
+    login_methods = body["loginMethods"]
+    core_config = body.get("coreConfig", {})
+
+    first_factors: List[str] = []
+    if login_methods.get("emailPassword", {}).get("enabled") is True:
+        first_factors.append("emailpassword")
+    if login_methods.get("thirdParty", {}).get("enabled") is True:
+        first_factors.append("thirdparty")
+    if login_methods.get("passwordless", {}).get("enabled") is True:
+        first_factors.extend(["otp-phone", "otp-email", "link-phone", "link-email"])
+
+    core_resp = await create_or_update_tenant(
+        tenant_id,
+        config=TenantConfigCreateOrUpdate(
+            first_factors=first_factors,
+            core_config=core_config,
+        ),
+    )
+
+    if login_methods.get("thirdParty", {}).get("providers") is not None:
+        for provider in login_methods["thirdParty"]["providers"]:
+            await create_or_update_third_party_config(
+                tenant_id,
+                config=ProviderConfig.from_json(provider),
+            )
+
+    return JsonResponse({"status": "OK", "createdNew": core_resp.created_new})
+
+
+async def add_user_to_tenant(request: HttpRequest):
+    body = json.loads(request.body)
+    if body is None:
+        raise Exception("Should never come here")
+    tenant_id = body["tenantId"]
+    recipe_user_id = body["recipeUserId"]
+
+    core_resp = await associate_user_to_tenant(tenant_id, RecipeUserId(recipe_user_id))
+
+    if isinstance(core_resp, AssociateUserToTenantOkResult):
+        return JsonResponse(
+            {"status": "OK", "wasAlreadyAssociated": core_resp.was_already_associated}
+        )
+    elif isinstance(core_resp, AssociateUserToTenantUnknownUserIdError):
+        return JsonResponse({"status": "UNKNOWN_USER_ID_ERROR"})
+    elif isinstance(core_resp, AssociateUserToTenantEmailAlreadyExistsError):
+        return JsonResponse({"status": "EMAIL_ALREADY_EXISTS_ERROR"})
+    elif isinstance(core_resp, AssociateUserToTenantPhoneNumberAlreadyExistsError):
+        return JsonResponse({"status": "PHONE_NUMBER_ALREADY_EXISTS_ERROR"})
+    elif isinstance(core_resp, AssociateUserToTenantThirdPartyUserAlreadyExistsError):
+        return JsonResponse({"status": "THIRD_PARTY_USER_ALREADY_EXISTS_ERROR"})
+    return JsonResponse(
+        {"status": "ASSOCIATION_NOT_ALLOWED_ERROR", "reason": core_resp.reason}
+    )
+
+
+async def remove_user_from_tenant(request: HttpRequest):
+    body = json.loads(request.body)
+    if body is None:
+        raise Exception("Should never come here")
+    tenant_id = body["tenantId"]
+    recipe_user_id = body["recipeUserId"]
+
+    core_resp = await disassociate_user_from_tenant(
+        tenant_id, RecipeUserId(recipe_user_id)
+    )
+
+    return JsonResponse({"status": "OK", "wasAssociated": core_resp.was_associated})
+
+
+async def remove_tenant(request: HttpRequest):
+    body = json.loads(request.body)
+    if body is None:
+        raise Exception("Should never come here")
+    tenant_id = body["tenantId"]
+
+    core_resp = await delete_tenant(tenant_id)
+
+    return JsonResponse({"status": "OK", "didExist": core_resp.did_exist})
+
+
+async def test_set_flow(request: HttpRequest):
+    body = json.loads(request.body)
+    import mysite.store
+
+    mysite.store.contact_method = body["contactMethod"]
+    mysite.store.flow_type = body["flowType"]
+    custom_init()
+    return HttpResponse("")
+
+
+async def test_set_account_linking_config(request: HttpRequest):
+    import mysite.store
+
+    body = json.loads(request.body)
+    if body is None:
+        raise Exception("Invalid request body")
+    mysite.store.accountlinking_config = body
+    custom_init()
+    return HttpResponse("")
+
+
+async def set_mfa_info(request: HttpRequest):
+    import mysite.store
+
+    body = json.loads(request.body)
+    if body is None:
+        return JsonResponse({"error": "Invalid request body"}, status_code=400)
+    mysite.store.mfa_info = body
+    return JsonResponse({"status": "OK"})
+
+
+@verify_session()
+async def add_required_factor(request: HttpRequest):
+    session_: SessionContainer = request.supertokens  # type: ignore
+    body = json.loads(request.body)
+    if body is None or "factorId" not in body:
+        return JsonResponse({"error": "Invalid request body"}, status_code=400)
+
+    await add_to_required_secondary_factors_for_user(
+        session_.get_user_id(),  # type: ignore
+        body["factorId"],
+    )
+
+    return JsonResponse({"status": "OK"})
+
+
+def test_set_enabled_recipes(request: HttpRequest):
+    import mysite.store
+
+    body = json.loads(request.body)
+    if body is None:
+        raise Exception("Invalid request body")
+    mysite.store.enabled_recipes = body.get("enabledRecipes")
+    mysite.store.enabled_providers = body.get("enabledProviders")
+    custom_init()
+    return HttpResponse("")
+
+
+def test_get_totp_code(request: HttpRequest):
+    from pyotp import TOTP
+
+    body = json.loads(request.body)
+    if body is None or "secret" not in body:
+        return JsonResponse({"error": "Invalid request body"}, status_code=400)
+
+    secret = body["secret"]
+    totp = TOTP(secret, digits=6, interval=1)
+    code = totp.now()
+
+    return JsonResponse({"totp": code})
+
+
+def test_create_oauth2_client(request: HttpRequest):
+    body = json.loads(request.body)
+    if body is None:
+        raise Exception("Invalid request body")
+    client = create_oauth2_client(CreateOAuth2ClientInput.from_json(body))
+    return JsonResponse(client.to_json())
 
 
 def before_each(request: HttpRequest):
-    setattr(settings, "CODE_STORE", dict())
-    return HttpResponse('')
+    import mysite.store
+
+    mysite.store.contact_method = "EMAIL_OR_PHONE"
+    mysite.store.flow_type = "USER_INPUT_CODE_AND_MAGIC_LINK"
+    mysite.store.latest_url_with_token = ""
+    mysite.store.code_store = dict()
+    mysite.store.accountlinking_config = {}
+    mysite.store.enabled_providers = None
+    mysite.store.enabled_recipes = None
+    mysite.store.mfa_info = {}
+    custom_init()
+    return HttpResponse("")
 
 
 def test_feature_flags(request: HttpRequest):
-    return JsonResponse({
-        'available': ['passwordless']
-    })
+    return JsonResponse(
+        {
+            "available": [
+                "passwordless",
+                "thirdpartypasswordless",
+                "generalerror",
+                "userroles",
+                "multitenancy",
+                "multitenancyManagementEndpoints",
+                "accountlinking",
+                "mfa",
+                "recipeConfig",
+                "accountlinking-fixes",
+                "oauth2",
+            ]
+        }
+    )

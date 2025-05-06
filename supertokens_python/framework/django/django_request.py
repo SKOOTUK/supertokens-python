@@ -14,25 +14,32 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Dict, Union
 from urllib.parse import parse_qsl
 
 from supertokens_python.framework.request import BaseRequest
 
 if TYPE_CHECKING:
+    from django.http import HttpRequest
+
     from supertokens_python.recipe.session.interfaces import SessionContainer
 
 
 class DjangoRequest(BaseRequest):
-    from django.http import HttpRequest
-
     def __init__(self, request: HttpRequest):
         super().__init__()
         self.request = request
 
+    def get_original_url(self) -> str:
+        return self.request.build_absolute_uri()
+
     def get_query_param(
-            self, key: str, default: Union[str, None] = None) -> Union[str, None]:
+        self, key: str, default: Union[str, None] = None
+    ) -> Union[str, None]:
         return self.request.GET.get(key, default)
+
+    def get_query_params(self) -> Dict[str, Any]:
+        return self.request.GET.dict()
 
     async def json(self) -> Union[Any, None]:
         try:
@@ -50,8 +57,10 @@ class DjangoRequest(BaseRequest):
         return self.request.COOKIES.get(key)
 
     def get_header(self, key: str) -> Union[None, str]:
-        key = key.replace('-', '_')
-        key = 'HTTP_' + key
+        key = key.replace("-", "_")
+        if key.upper() in self.request.META:
+            return self.request.META.get(key.upper())
+        key = "HTTP_" + key
         return self.request.META.get(key.upper())
 
     def get_session(self) -> Union[SessionContainer, None]:
@@ -59,9 +68,28 @@ class DjangoRequest(BaseRequest):
 
     def set_session(self, session: SessionContainer):
         self.request.supertokens = session  # type: ignore
+        if hasattr(self.request, "_request"):
+            # this is there because in Django reset framework, the request object
+            # in the API is the one from reset framework, however, the
+            # one from the middleware is the original one. So we need to set
+            # this so that the middleware also gets the token updates which can then be
+            # used to update the response.
+            # pylint: disable=protected-access
+            self.request._request.supertokens = session  # type: ignore
+
+    def set_session_as_none(self):
+        self.request.supertokens = None  # type: ignore
+        if hasattr(self.request, "_request"):
+            # this is there because in Django reset framework, the request object
+            # in the API is the one from reset framework, however, the
+            # one from the middleware is the original one. So we need to set
+            # this so that the middleware also gets the token updates which can then be
+            # used to update the response.
+            # pylint: disable=protected-access
+            self.request._request.supertokens = None  # type: ignore
 
     def get_path(self) -> str:
         return self.request.path
 
     async def form_data(self):
-        return dict(parse_qsl(self.request.body.decode('utf-8')))
+        return dict(parse_qsl(self.request.body.decode("utf-8")))

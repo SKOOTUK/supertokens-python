@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.exceptions API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,11 +41,12 @@
 # under the License.
 from __future__ import annotations
 
-from typing import Union
+from typing import NoReturn, Union
 
 
 def raise_general_exception(
-        msg: Union[str, Exception], previous: Union[None, Exception] = None):
+    msg: Union[str, Exception], previous: Union[None, Exception] = None
+) -&gt; NoReturn:
     if isinstance(msg, SuperTokensError):
         raise msg
     if isinstance(msg, Exception):
@@ -53,7 +54,7 @@ def raise_general_exception(
     raise GeneralError(msg) from previous
 
 
-def raise_bad_input_exception(msg: str):
+def raise_bad_input_exception(msg: str) -&gt; NoReturn:
     raise BadInputError(msg)
 
 
@@ -77,35 +78,16 @@ class BadInputError(SuperTokensError):
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="supertokens_python.exceptions.raise_bad_input_exception"><code class="name flex">
-<span>def <span class="ident">raise_bad_input_exception</span></span>(<span>msg: str)</span>
+<span>def <span class="ident">raise_bad_input_exception</span></span>(<span>msg: str) ‑> NoReturn</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def raise_bad_input_exception(msg: str):
-    raise BadInputError(msg)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.exceptions.raise_general_exception"><code class="name flex">
-<span>def <span class="ident">raise_general_exception</span></span>(<span>msg: Union[str, Exception], previous: Union[None, Exception] = None)</span>
+<span>def <span class="ident">raise_general_exception</span></span>(<span>msg: Union[str, Exception], previous: Union[None, Exception] = None) ‑> NoReturn</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def raise_general_exception(
-        msg: Union[str, Exception], previous: Union[None, Exception] = None):
-    if isinstance(msg, SuperTokensError):
-        raise msg
-    if isinstance(msg, Exception):
-        raise GeneralError(msg) from None
-    raise GeneralError(msg) from previous</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -174,21 +156,26 @@ class BadInputError(SuperTokensError):
 <ul class="hlist">
 <li><a title="supertokens_python.exceptions.BadInputError" href="#supertokens_python.exceptions.BadInputError">BadInputError</a></li>
 <li><a title="supertokens_python.exceptions.GeneralError" href="#supertokens_python.exceptions.GeneralError">GeneralError</a></li>
+<li><a title="supertokens_python.recipe.dashboard.exceptions.SuperTokensDashboardError" href="recipe/dashboard/exceptions.html#supertokens_python.recipe.dashboard.exceptions.SuperTokensDashboardError">SuperTokensDashboardError</a></li>
 <li><a title="supertokens_python.recipe.emailpassword.exceptions.SuperTokensEmailPasswordError" href="recipe/emailpassword/exceptions.html#supertokens_python.recipe.emailpassword.exceptions.SuperTokensEmailPasswordError">SuperTokensEmailPasswordError</a></li>
 <li><a title="supertokens_python.recipe.emailverification.exceptions.SuperTokensEmailVerificationError" href="recipe/emailverification/exceptions.html#supertokens_python.recipe.emailverification.exceptions.SuperTokensEmailVerificationError">SuperTokensEmailVerificationError</a></li>
 <li><a title="supertokens_python.recipe.jwt.exceptions.SuperTokensJWTError" href="recipe/jwt/exceptions.html#supertokens_python.recipe.jwt.exceptions.SuperTokensJWTError">SuperTokensJWTError</a></li>
+<li><a title="supertokens_python.recipe.multitenancy.exceptions.MultitenancyError" href="recipe/multitenancy/exceptions.html#supertokens_python.recipe.multitenancy.exceptions.MultitenancyError">MultitenancyError</a></li>
+<li><a title="supertokens_python.recipe.oauth2provider.exceptions.OAuth2ProviderError" href="recipe/oauth2provider/exceptions.html#supertokens_python.recipe.oauth2provider.exceptions.OAuth2ProviderError">OAuth2ProviderError</a></li>
 <li><a title="supertokens_python.recipe.openid.exceptions.SuperTokensOpenIdError" href="recipe/openid/exceptions.html#supertokens_python.recipe.openid.exceptions.SuperTokensOpenIdError">SuperTokensOpenIdError</a></li>
 <li><a title="supertokens_python.recipe.passwordless.exceptions.SuperTokensPasswordlessError" href="recipe/passwordless/exceptions.html#supertokens_python.recipe.passwordless.exceptions.SuperTokensPasswordlessError">SuperTokensPasswordlessError</a></li>
 <li><a title="supertokens_python.recipe.session.exceptions.SuperTokensSessionError" href="recipe/session/exceptions.html#supertokens_python.recipe.session.exceptions.SuperTokensSessionError">SuperTokensSessionError</a></li>
+<li><a title="supertokens_python.recipe.thirdparty.exceptions.ClientTypeNotFoundError" href="recipe/thirdparty/exceptions.html#supertokens_python.recipe.thirdparty.exceptions.ClientTypeNotFoundError">ClientTypeNotFoundError</a></li>
 <li><a title="supertokens_python.recipe.thirdparty.exceptions.SuperTokensThirdPartyError" href="recipe/thirdparty/exceptions.html#supertokens_python.recipe.thirdparty.exceptions.SuperTokensThirdPartyError">SuperTokensThirdPartyError</a></li>
-<li><a title="supertokens_python.recipe.thirdpartyemailpassword.exceptions.SupertokensThirdPartyEmailPasswordError" href="recipe/thirdpartyemailpassword/exceptions.html#supertokens_python.recipe.thirdpartyemailpassword.exceptions.SupertokensThirdPartyEmailPasswordError">SupertokensThirdPartyEmailPasswordError</a></li>
+<li><a title="supertokens_python.recipe.usermetadata.exceptions.SuperTokensUserMetadataError" href="recipe/usermetadata/exceptions.html#supertokens_python.recipe.usermetadata.exceptions.SuperTokensUserMetadataError">SuperTokensUserMetadataError</a></li>
+<li><a title="supertokens_python.recipe.userroles.exceptions.SuperTokensUserRolesError" href="recipe/userroles/exceptions.html#supertokens_python.recipe.userroles.exceptions.SuperTokensUserRolesError">SuperTokensUserRolesError</a></li>
 </ul>
 </dd>
 </dl>
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -221,7 +208,7 @@ class BadInputError(SuperTokensError):
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

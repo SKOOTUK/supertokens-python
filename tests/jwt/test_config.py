@@ -18,33 +18,22 @@ from pytest import mark
 from supertokens_python import InputAppInfo, SupertokensConfig, init
 from supertokens_python.recipe import jwt
 from supertokens_python.recipe.jwt import JWTRecipe
-from tests.utils import clean_st, reset, setup_st, start_st
 
-
-def setup_function(_):
-    reset()
-    clean_st()
-    setup_st()
-
-
-def teardown_function(_):
-    reset()
-    clean_st()
+from tests.utils import get_new_core_app_url
 
 
 @mark.asyncio
 async def test_that_the_default_config_sets_values_correctly_for_JWT_recipe():
     init(
-        supertokens_config=SupertokensConfig('http://localhost:3567'),
+        supertokens_config=SupertokensConfig(get_new_core_app_url()),
         app_info=InputAppInfo(
-            app_name='SuperTokens Demo',
-            api_domain='http://api.supertokens.io',
-            website_domain='supertokens.io'
+            app_name="SuperTokens Demo",
+            api_domain="http://api.supertokens.io",
+            website_domain="supertokens.io",
         ),
-        framework='fastapi',
-        recipe_list=[jwt.init()]
+        framework="fastapi",
+        recipe_list=[jwt.init()],
     )
-    start_st()
 
     jwt_recipe = JWTRecipe.get_instance()
     assert jwt_recipe.config.jwt_validity_seconds == 3153600000
@@ -53,18 +42,15 @@ async def test_that_the_default_config_sets_values_correctly_for_JWT_recipe():
 @mark.asyncio
 async def test_that_the_config_sets_values_correctly_for_JWT_recipe_when_jwt_validity_is_set():
     init(
-        supertokens_config=SupertokensConfig('http://localhost:3567'),
+        supertokens_config=SupertokensConfig(get_new_core_app_url()),
         app_info=InputAppInfo(
-            app_name='SuperTokens Demo',
-            api_domain='http://api.supertokens.io',
-            website_domain='supertokens.io'
+            app_name="SuperTokens Demo",
+            api_domain="http://api.supertokens.io",
+            website_domain="supertokens.io",
         ),
-        framework='fastapi',
-        recipe_list=[jwt.init(
-            jwt_validity_seconds=24 * 60 * 60  # 24 hours
-        )]
+        framework="fastapi",
+        recipe_list=[jwt.init(jwt_validity_seconds=24 * 60 * 60)],  # 24 hours
     )
-    start_st()
 
     jwt_recipe = JWTRecipe.get_instance()
     assert jwt_recipe.config.jwt_validity_seconds == 24 * 60 * 60

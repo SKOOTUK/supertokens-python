@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.jwt.recipe_implementation API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,61 +41,92 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+import re
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from supertokens_python.normalised_url_path import NormalisedURLPath
 from supertokens_python.querier import Querier
 
 if TYPE_CHECKING:
-    from .utils import JWTConfig
-    from .interfaces import CreateJwtResult
     from supertokens_python.supertokens import AppInfo
 
+    from .utils import JWTConfig
+
 from supertokens_python.recipe.jwt.interfaces import (
-    CreateJwtResultOk, CreateJwtResultUnsupportedAlgorithm, GetJWKSResult,
-    RecipeInterface)
+    CreateJwtOkResult,
+    CreateJwtResultUnsupportedAlgorithm,
+    GetJWKSResult,
+    RecipeInterface,
+)
 
 from .interfaces import JsonWebKey
 
+# This corresponds to the dynamicSigningKeyOverlapMS in the core
+DEFAULT_JWKS_MAX_AGE = 60
+
 
 class RecipeImplementation(RecipeInterface):
-
     def __init__(self, querier: Querier, config: JWTConfig, app_info: AppInfo):
         super().__init__()
         self.querier = querier
         self.config = config
         self.app_info = app_info
 
-    async def create_jwt(self, payload: Dict[str, Any], validity_seconds: Union[int, None], user_context: Dict[str, Any]) -&gt; CreateJwtResult:
+    async def create_jwt(
+        self,
+        payload: Dict[str, Any],
+        validity_seconds: Optional[int],
+        use_static_signing_key: Optional[bool],
+        user_context: Dict[str, Any],
+    ) -&gt; Union[CreateJwtOkResult, CreateJwtResultUnsupportedAlgorithm]:
         if validity_seconds is None:
             validity_seconds = self.config.jwt_validity_seconds
 
         data = {
-            &#39;payload&#39;: payload,
-            &#39;validity&#39;: validity_seconds,
-            &#39;algorithm&#39;: &#39;RS256&#39;,
-            &#39;jwksDomain&#39;: self.app_info.api_domain.get_as_string_dangerous()
+            &#34;payload&#34;: payload,
+            &#34;validity&#34;: validity_seconds,
+            &#34;useStaticSigningKey&#34;: use_static_signing_key is not False,
+            &#34;algorithm&#34;: &#34;RS256&#34;,
+            &#34;jwksDomain&#34;: self.app_info.api_domain.get_as_string_dangerous(),
         }
-        response = await self.querier.send_post_request(NormalisedURLPath(&#34;/recipe/jwt&#34;), data)
+        response = await self.querier.send_post_request(
+            NormalisedURLPath(&#34;/recipe/jwt&#34;),
+            data,
+            user_context=user_context,
+        )
 
-        if response[&#39;status&#39;] == &#39;OK&#39;:
-            return CreateJwtResultOk(response[&#39;jwt&#39;])
+        if response[&#34;status&#34;] == &#34;OK&#34;:
+            return CreateJwtOkResult(response[&#34;jwt&#34;])
         return CreateJwtResultUnsupportedAlgorithm()
 
     async def get_jwks(self, user_context: Dict[str, Any]) -&gt; GetJWKSResult:
-        response = await self.querier.send_get_request(NormalisedURLPath(&#34;/recipe/jwt/jwks&#34;), {})
+        response = await self.querier.send_get_request(
+            NormalisedURLPath(&#34;/.well-known/jwks.json&#34;),
+            {},
+            user_context=user_context,
+        )
+
+        validity_in_secs = DEFAULT_JWKS_MAX_AGE
+        cache_control = response[&#34;_headers&#34;].get(&#34;Cache-Control&#34;)
+
+        if cache_control is not None:
+            pattern = r&#34;,?\s*max-age=(\d+)(?:,|$)&#34;
+            max_age_header = re.match(pattern, cache_control)
+            if max_age_header is not None:
+                try:
+                    validity_in_secs = int(max_age_header.group(1))
+                except Exception:
+                    validity_in_secs = DEFAULT_JWKS_MAX_AGE
 
         keys: List[JsonWebKey] = []
-        for key in response[&#39;keys&#39;]:
-            keys.append(JsonWebKey(
-                key[&#39;kty&#39;],
-                key[&#39;kid&#39;],
-                key[&#39;n&#39;],
-                key[&#39;e&#39;],
-                key[&#39;alg&#39;],
-                key[&#39;use&#39;]
-            ))
-        return GetJWKSResult(response[&#39;status&#39;], keys)</code></pre>
+        for key in response[&#34;keys&#34;]:
+            keys.append(
+                JsonWebKey(
+                    key[&#34;kty&#34;], key[&#34;kid&#34;], key[&#34;n&#34;], key[&#34;e&#34;], key[&#34;alg&#34;], key[&#34;use&#34;]
+                )
+            )
+
+        return GetJWKSResult(keys, validity_in_secs)</code></pre>
 </details>
 </section>
 <section>
@@ -119,43 +150,67 @@ inheritance.</p></div>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class RecipeImplementation(RecipeInterface):
-
     def __init__(self, querier: Querier, config: JWTConfig, app_info: AppInfo):
         super().__init__()
         self.querier = querier
         self.config = config
         self.app_info = app_info
 
-    async def create_jwt(self, payload: Dict[str, Any], validity_seconds: Union[int, None], user_context: Dict[str, Any]) -&gt; CreateJwtResult:
+    async def create_jwt(
+        self,
+        payload: Dict[str, Any],
+        validity_seconds: Optional[int],
+        use_static_signing_key: Optional[bool],
+        user_context: Dict[str, Any],
+    ) -&gt; Union[CreateJwtOkResult, CreateJwtResultUnsupportedAlgorithm]:
         if validity_seconds is None:
             validity_seconds = self.config.jwt_validity_seconds
 
         data = {
-            &#39;payload&#39;: payload,
-            &#39;validity&#39;: validity_seconds,
-            &#39;algorithm&#39;: &#39;RS256&#39;,
-            &#39;jwksDomain&#39;: self.app_info.api_domain.get_as_string_dangerous()
+            &#34;payload&#34;: payload,
+            &#34;validity&#34;: validity_seconds,
+            &#34;useStaticSigningKey&#34;: use_static_signing_key is not False,
+            &#34;algorithm&#34;: &#34;RS256&#34;,
+            &#34;jwksDomain&#34;: self.app_info.api_domain.get_as_string_dangerous(),
         }
-        response = await self.querier.send_post_request(NormalisedURLPath(&#34;/recipe/jwt&#34;), data)
+        response = await self.querier.send_post_request(
+            NormalisedURLPath(&#34;/recipe/jwt&#34;),
+            data,
+            user_context=user_context,
+        )
 
-        if response[&#39;status&#39;] == &#39;OK&#39;:
-            return CreateJwtResultOk(response[&#39;jwt&#39;])
+        if response[&#34;status&#34;] == &#34;OK&#34;:
+            return CreateJwtOkResult(response[&#34;jwt&#34;])
         return CreateJwtResultUnsupportedAlgorithm()
 
     async def get_jwks(self, user_context: Dict[str, Any]) -&gt; GetJWKSResult:
-        response = await self.querier.send_get_request(NormalisedURLPath(&#34;/recipe/jwt/jwks&#34;), {})
+        response = await self.querier.send_get_request(
+            NormalisedURLPath(&#34;/.well-known/jwks.json&#34;),
+            {},
+            user_context=user_context,
+        )
+
+        validity_in_secs = DEFAULT_JWKS_MAX_AGE
+        cache_control = response[&#34;_headers&#34;].get(&#34;Cache-Control&#34;)
+
+        if cache_control is not None:
+            pattern = r&#34;,?\s*max-age=(\d+)(?:,|$)&#34;
+            max_age_header = re.match(pattern, cache_control)
+            if max_age_header is not None:
+                try:
+                    validity_in_secs = int(max_age_header.group(1))
+                except Exception:
+                    validity_in_secs = DEFAULT_JWKS_MAX_AGE
 
         keys: List[JsonWebKey] = []
-        for key in response[&#39;keys&#39;]:
-            keys.append(JsonWebKey(
-                key[&#39;kty&#39;],
-                key[&#39;kid&#39;],
-                key[&#39;n&#39;],
-                key[&#39;e&#39;],
-                key[&#39;alg&#39;],
-                key[&#39;use&#39;]
-            ))
-        return GetJWKSResult(response[&#39;status&#39;], keys)</code></pre>
+        for key in response[&#34;keys&#34;]:
+            keys.append(
+                JsonWebKey(
+                    key[&#34;kty&#34;], key[&#34;kid&#34;], key[&#34;n&#34;], key[&#34;e&#34;], key[&#34;alg&#34;], key[&#34;use&#34;]
+                )
+            )
+
+        return GetJWKSResult(keys, validity_in_secs)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -165,55 +220,16 @@ inheritance.</p></div>
 <h3>Methods</h3>
 <dl>
 <dt id="supertokens_python.recipe.jwt.recipe_implementation.RecipeImplementation.create_jwt"><code class="name flex">
-<span>async def <span class="ident">create_jwt</span></span>(<span>self, payload: Dict[str, Any], validity_seconds: Union[int, None], user_context: Dict[str, Any]) ‑> CreateJwtResult</span>
+<span>async def <span class="ident">create_jwt</span></span>(<span>self, payload: Dict[str, Any], validity_seconds: Optional[int], use_static_signing_key: Optional[bool], user_context: Dict[str, Any]) ‑> Union[<a title="supertokens_python.recipe.jwt.interfaces.CreateJwtOkResult" href="interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtOkResult">CreateJwtOkResult</a>, <a title="supertokens_python.recipe.jwt.interfaces.CreateJwtResultUnsupportedAlgorithm" href="interfaces.html#supertokens_python.recipe.jwt.interfaces.CreateJwtResultUnsupportedAlgorithm">CreateJwtResultUnsupportedAlgorithm</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def create_jwt(self, payload: Dict[str, Any], validity_seconds: Union[int, None], user_context: Dict[str, Any]) -&gt; CreateJwtResult:
-    if validity_seconds is None:
-        validity_seconds = self.config.jwt_validity_seconds
-
-    data = {
-        &#39;payload&#39;: payload,
-        &#39;validity&#39;: validity_seconds,
-        &#39;algorithm&#39;: &#39;RS256&#39;,
-        &#39;jwksDomain&#39;: self.app_info.api_domain.get_as_string_dangerous()
-    }
-    response = await self.querier.send_post_request(NormalisedURLPath(&#34;/recipe/jwt&#34;), data)
-
-    if response[&#39;status&#39;] == &#39;OK&#39;:
-        return CreateJwtResultOk(response[&#39;jwt&#39;])
-    return CreateJwtResultUnsupportedAlgorithm()</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.jwt.recipe_implementation.RecipeImplementation.get_jwks"><code class="name flex">
 <span>async def <span class="ident">get_jwks</span></span>(<span>self, user_context: Dict[str, Any]) ‑> <a title="supertokens_python.recipe.jwt.interfaces.GetJWKSResult" href="interfaces.html#supertokens_python.recipe.jwt.interfaces.GetJWKSResult">GetJWKSResult</a></span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def get_jwks(self, user_context: Dict[str, Any]) -&gt; GetJWKSResult:
-    response = await self.querier.send_get_request(NormalisedURLPath(&#34;/recipe/jwt/jwks&#34;), {})
-
-    keys: List[JsonWebKey] = []
-    for key in response[&#39;keys&#39;]:
-        keys.append(JsonWebKey(
-            key[&#39;kty&#39;],
-            key[&#39;kid&#39;],
-            key[&#39;n&#39;],
-            key[&#39;e&#39;],
-            key[&#39;alg&#39;],
-            key[&#39;use&#39;]
-        ))
-    return GetJWKSResult(response[&#39;status&#39;], keys)</code></pre>
-</details>
 </dd>
 </dl>
 </dd>
@@ -221,7 +237,7 @@ inheritance.</p></div>
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -246,7 +262,7 @@ inheritance.</p></div>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

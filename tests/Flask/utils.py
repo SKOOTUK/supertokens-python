@@ -15,25 +15,24 @@
 
 from typing import Any, Dict
 
-from fastapi import Response
+from werkzeug.test import TestResponse
 
 
-def extract_all_cookies(response: Response) -> Dict[str, Any]:
-    cookie_headers = response.headers.getlist('Set-Cookie')
+def extract_all_cookies(response: TestResponse) -> Dict[str, Any]:
+    cookie_headers = response.headers.getlist("Set-Cookie")
     cookies: Dict[str, Any] = {}
     for header in cookie_headers:
-        attributes = header.split(';')
+        attributes = header.split(";")
         cookie = {}
         is_name = True
         name: str = ""
         for attr in attributes:
-            split = attr.split('=')
+            split = attr.split("=")
             if is_name:
                 name = split[0].strip()
-                cookie['value'] = split[1]
+                cookie["value"] = split[1]
                 is_name = False
             else:
-                cookie[split[0].strip().lower()] = split[1] if len(
-                    split) > 1 else True
+                cookie[split[0].strip().lower()] = split[1] if len(split) > 1 else True
         cookies[name] = cookie
     return cookies

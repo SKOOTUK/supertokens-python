@@ -13,13 +13,31 @@
 # under the License.
 from __future__ import annotations
 
+from typing import Any, Dict
+
 from supertokens_python.recipe.emailverification.interfaces import (
-    APIInterface, APIOptions)
+    APIInterface,
+    APIOptions,
+)
+from supertokens_python.recipe.session.asyncio import get_session
+from supertokens_python.utils import send_200_response
 
 
-async def handle_generate_email_verify_token_api(api_implementation: APIInterface, api_options: APIOptions):
+async def handle_generate_email_verify_token_api(
+    api_implementation: APIInterface,
+    api_options: APIOptions,
+    user_context: Dict[str, Any],
+):
     if api_implementation.disable_generate_email_verify_token_post:
         return None
-    result = await api_implementation.generate_email_verify_token_post(api_options, {})
-    api_options.response.set_json_content(result.to_json())
-    return api_options.response
+    session = await get_session(
+        api_options.request,
+        override_global_claim_validators=lambda _, __, ___: [],
+        user_context=user_context,
+    )
+    assert session is not None
+
+    result = await api_implementation.generate_email_verify_token_post(
+        session, api_options, user_context
+    )
+    return send_200_response(result.to_json(), api_options.response)

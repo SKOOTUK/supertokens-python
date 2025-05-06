@@ -11,15 +11,27 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from __future__ import annotations
+
+from typing import Any, Dict
+
 from supertokens_python.recipe.jwt.interfaces import APIInterface, APIOptions
+from supertokens_python.utils import send_200_response
+
+from ..interfaces import JWKSGetResponse
 
 
-async def jwks_get(api_implementation: APIInterface, api_options: APIOptions):
+async def jwks_get(
+    api_implementation: APIInterface,
+    api_options: APIOptions,
+    user_context: Dict[str, Any],
+):
     if api_implementation.disable_jwks_get:
         return None
 
-    result = await api_implementation.jwks_get(api_options, {})
-    api_options.response.set_header("Access-Control-Allow-Origin", "*")
-    api_options.response.set_json_content(result.to_json())
+    result = await api_implementation.jwks_get(api_options, user_context)
 
-    return api_options.response
+    if isinstance(result, JWKSGetResponse):
+        api_options.response.set_header("Access-Control-Allow-Origin", "*")
+
+    return send_200_response(result.to_json(), api_options.response)

@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.emailpassword API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -43,16 +43,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Union
 
+from supertokens_python.ingredients.emaildelivery import types as emaildelivery_types
+from supertokens_python.ingredients.emaildelivery.types import EmailDeliveryConfig
+from supertokens_python.recipe.emailpassword.types import EmailTemplateVars
+
 from . import exceptions as ex
 from . import utils
+from .emaildelivery import services as emaildelivery_services
 from .recipe import EmailPasswordRecipe
 
 exceptions = ex
 InputOverrideConfig = utils.InputOverrideConfig
-InputResetPasswordUsingTokenFeature = utils.InputResetPasswordUsingTokenFeature
-InputEmailVerificationConfig = utils.InputEmailVerificationConfig
 InputSignUpFeature = utils.InputSignUpFeature
 InputFormField = utils.InputFormField
+SMTPService = emaildelivery_services.SMTPService
+EmailDeliveryInterface = emaildelivery_types.EmailDeliveryInterface
 
 if TYPE_CHECKING:
     from supertokens_python.supertokens import AppInfo
@@ -60,16 +65,15 @@ if TYPE_CHECKING:
     from ...recipe_module import RecipeModule
 
 
-def init(sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
-         reset_password_using_token_feature: Union[
-             utils.InputResetPasswordUsingTokenFeature, None] = None,
-         email_verification_feature: Union[utils.InputEmailVerificationConfig, None] = None,
-         override: Union[utils.InputOverrideConfig, None] = None) -&gt; Callable[[AppInfo], RecipeModule]:
+def init(
+    sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
+    override: Union[utils.InputOverrideConfig, None] = None,
+    email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None,
+) -&gt; Callable[[AppInfo], RecipeModule]:
     return EmailPasswordRecipe.init(
         sign_up_feature,
-        reset_password_using_token_feature,
-        email_verification_feature,
-        override
+        override,
+        email_delivery,
     )</code></pre>
 </details>
 </section>
@@ -85,6 +89,10 @@ def init(sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
 <div class="desc"></div>
 </dd>
 <dt><code class="name"><a title="supertokens_python.recipe.emailpassword.constants" href="constants.html">supertokens_python.recipe.emailpassword.constants</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt><code class="name"><a title="supertokens_python.recipe.emailpassword.emaildelivery" href="emaildelivery/index.html">supertokens_python.recipe.emailpassword.emaildelivery</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -124,26 +132,10 @@ def init(sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="supertokens_python.recipe.emailpassword.init"><code class="name flex">
-<span>def <span class="ident">init</span></span>(<span>sign_up_feature: Union[<a title="supertokens_python.recipe.emailpassword.utils.InputSignUpFeature" href="utils.html#supertokens_python.recipe.emailpassword.utils.InputSignUpFeature">InputSignUpFeature</a>, None] = None, reset_password_using_token_feature: Union[<a title="supertokens_python.recipe.emailpassword.utils.InputResetPasswordUsingTokenFeature" href="utils.html#supertokens_python.recipe.emailpassword.utils.InputResetPasswordUsingTokenFeature">InputResetPasswordUsingTokenFeature</a>, None] = None, email_verification_feature: Union[<a title="supertokens_python.recipe.emailpassword.utils.InputEmailVerificationConfig" href="utils.html#supertokens_python.recipe.emailpassword.utils.InputEmailVerificationConfig">InputEmailVerificationConfig</a>, None] = None, override: Union[<a title="supertokens_python.recipe.emailpassword.utils.InputOverrideConfig" href="utils.html#supertokens_python.recipe.emailpassword.utils.InputOverrideConfig">InputOverrideConfig</a>, None] = None) ‑> Callable[[AppInfo], RecipeModule]</span>
+<span>def <span class="ident">init</span></span>(<span>sign_up_feature: Union[<a title="supertokens_python.recipe.emailpassword.utils.InputSignUpFeature" href="utils.html#supertokens_python.recipe.emailpassword.utils.InputSignUpFeature">InputSignUpFeature</a>, None] = None, override: Union[<a title="supertokens_python.recipe.emailpassword.utils.InputOverrideConfig" href="utils.html#supertokens_python.recipe.emailpassword.utils.InputOverrideConfig">InputOverrideConfig</a>, None] = None, email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def init(sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
-         reset_password_using_token_feature: Union[
-             utils.InputResetPasswordUsingTokenFeature, None] = None,
-         email_verification_feature: Union[utils.InputEmailVerificationConfig, None] = None,
-         override: Union[utils.InputOverrideConfig, None] = None) -&gt; Callable[[AppInfo], RecipeModule]:
-    return EmailPasswordRecipe.init(
-        sign_up_feature,
-        reset_password_using_token_feature,
-        email_verification_feature,
-        override
-    )</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -151,7 +143,7 @@ def init(sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -166,6 +158,7 @@ def init(sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
 <li><code><a title="supertokens_python.recipe.emailpassword.api" href="api/index.html">supertokens_python.recipe.emailpassword.api</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailpassword.asyncio" href="asyncio/index.html">supertokens_python.recipe.emailpassword.asyncio</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailpassword.constants" href="constants.html">supertokens_python.recipe.emailpassword.constants</a></code></li>
+<li><code><a title="supertokens_python.recipe.emailpassword.emaildelivery" href="emaildelivery/index.html">supertokens_python.recipe.emailpassword.emaildelivery</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailpassword.exceptions" href="exceptions.html">supertokens_python.recipe.emailpassword.exceptions</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailpassword.interfaces" href="interfaces.html">supertokens_python.recipe.emailpassword.interfaces</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailpassword.recipe" href="recipe.html">supertokens_python.recipe.emailpassword.recipe</a></code></li>
@@ -184,7 +177,7 @@ def init(sign_up_feature: Union[utils.InputSignUpFeature, None] = None,
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

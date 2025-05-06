@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.passwordless.types API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -41,14 +41,16 @@
 # under the License.
 from typing import List, Union
 
-
-class User:
-    def __init__(self, user_id: str,
-                 email: Union[str, None], phone_number: Union[str, None], time_joined: int):
-        self.user_id: str = user_id
-        self.email: Union[str, None] = email
-        self.phone_number: Union[str, None] = phone_number
-        self.time_joined: int = time_joined
+from supertokens_python.ingredients.emaildelivery import EmailDeliveryIngredient
+from supertokens_python.ingredients.emaildelivery.types import (
+    EmailDeliveryInterface,
+    SMTPServiceInterface,
+)
+from supertokens_python.ingredients.smsdelivery import SMSDeliveryIngredient
+from supertokens_python.ingredients.smsdelivery.types import (
+    SMSDeliveryInterface,
+    TwilioServiceInterface,
+)
 
 
 class DeviceCode:
@@ -59,18 +61,86 @@ class DeviceCode:
 
 
 class DeviceType:
-    def __init__(self,
-                 pre_auth_session_id: str,
-                 failed_code_input_attempt_count: int,
-                 codes: List[DeviceCode],
-                 email: Union[str, None] = None,
-                 phone_number: Union[str, None] = None
-                 ):
+    def __init__(
+        self,
+        pre_auth_session_id: str,
+        failed_code_input_attempt_count: int,
+        codes: List[DeviceCode],
+        email: Union[str, None] = None,
+        phone_number: Union[str, None] = None,
+    ):
         self.pre_auth_session_id = pre_auth_session_id
         self.failed_code_input_attempt_count = failed_code_input_attempt_count
         self.codes = codes
         self.email = email
-        self.phone_number = phone_number</code></pre>
+        self.phone_number = phone_number
+
+
+class CreateAndSendCustomEmailParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        email: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.email = email
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor
+
+
+PasswordlessLoginEmailTemplateVars = CreateAndSendCustomEmailParameters
+
+
+class CreateAndSendCustomTextMessageParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        phone_number: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.phone_number = phone_number
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor
+
+
+PasswordlessLoginSMSTemplateVars = CreateAndSendCustomTextMessageParameters
+
+
+# Export:
+EmailTemplateVars = PasswordlessLoginEmailTemplateVars
+SMSTemplateVars = PasswordlessLoginSMSTemplateVars
+
+SMTPOverrideInput = SMTPServiceInterface[EmailTemplateVars]
+TwilioOverrideInput = TwilioServiceInterface[SMSTemplateVars]
+
+EmailDeliveryOverrideInput = EmailDeliveryInterface[EmailTemplateVars]
+SMSDeliveryOverrideInput = SMSDeliveryInterface[SMSTemplateVars]
+
+
+class PasswordlessIngredients:
+    def __init__(
+        self,
+        email_delivery: Union[EmailDeliveryIngredient[EmailTemplateVars], None] = None,
+        sms_delivery: Union[SMSDeliveryIngredient[SMSTemplateVars], None] = None,
+    ):
+        self.email_delivery = email_delivery
+        self.sms_delivery = sms_delivery</code></pre>
 </details>
 </section>
 <section>
@@ -82,6 +152,186 @@ class DeviceType:
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
+<dt id="supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters"><code class="flex name class">
+<span>class <span class="ident">CreateAndSendCustomEmailParameters</span></span>
+<span>(</span><span>tenant_id: str, code_life_time: int, pre_auth_session_id: str, email: str, is_first_factor: bool, user_input_code: Optional[str] = None, url_with_link_code: Optional[str] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CreateAndSendCustomEmailParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        email: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.email = email
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor</code></pre>
+</details>
+</dd>
+<dt id="supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters"><code class="flex name class">
+<span>class <span class="ident">PasswordlessLoginEmailTemplateVars</span></span>
+<span>(</span><span>tenant_id: str, code_life_time: int, pre_auth_session_id: str, email: str, is_first_factor: bool, user_input_code: Optional[str] = None, url_with_link_code: Optional[str] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CreateAndSendCustomEmailParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        email: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.email = email
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor</code></pre>
+</details>
+</dd>
+<dt id="supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters"><code class="flex name class">
+<span>class <span class="ident">EmailTemplateVars</span></span>
+<span>(</span><span>tenant_id: str, code_life_time: int, pre_auth_session_id: str, email: str, is_first_factor: bool, user_input_code: Optional[str] = None, url_with_link_code: Optional[str] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CreateAndSendCustomEmailParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        email: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.email = email
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor</code></pre>
+</details>
+</dd>
+<dt id="supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters"><code class="flex name class">
+<span>class <span class="ident">CreateAndSendCustomTextMessageParameters</span></span>
+<span>(</span><span>tenant_id: str, code_life_time: int, pre_auth_session_id: str, phone_number: str, is_first_factor: bool, user_input_code: Optional[str] = None, url_with_link_code: Optional[str] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CreateAndSendCustomTextMessageParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        phone_number: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.phone_number = phone_number
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor</code></pre>
+</details>
+</dd>
+<dt id="supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters"><code class="flex name class">
+<span>class <span class="ident">PasswordlessLoginSMSTemplateVars</span></span>
+<span>(</span><span>tenant_id: str, code_life_time: int, pre_auth_session_id: str, phone_number: str, is_first_factor: bool, user_input_code: Optional[str] = None, url_with_link_code: Optional[str] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CreateAndSendCustomTextMessageParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        phone_number: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.phone_number = phone_number
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor</code></pre>
+</details>
+</dd>
+<dt id="supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters"><code class="flex name class">
+<span>class <span class="ident">SMSTemplateVars</span></span>
+<span>(</span><span>tenant_id: str, code_life_time: int, pre_auth_session_id: str, phone_number: str, is_first_factor: bool, user_input_code: Optional[str] = None, url_with_link_code: Optional[str] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class CreateAndSendCustomTextMessageParameters:
+    def __init__(
+        self,
+        tenant_id: str,
+        code_life_time: int,
+        pre_auth_session_id: str,
+        phone_number: str,
+        is_first_factor: bool,
+        user_input_code: Union[str, None] = None,
+        url_with_link_code: Union[str, None] = None,
+    ):
+        self.code_life_time = code_life_time
+        self.pre_auth_session_id = pre_auth_session_id
+        self.phone_number = phone_number
+        self.user_input_code = user_input_code
+        self.url_with_link_code = url_with_link_code
+        self.tenant_id = tenant_id
+        self.is_first_factor = is_first_factor</code></pre>
+</details>
+</dd>
 <dt id="supertokens_python.recipe.passwordless.types.DeviceCode"><code class="flex name class">
 <span>class <span class="ident">DeviceCode</span></span>
 <span>(</span><span>code_id: str, time_created: str, code_life_time: int)</span>
@@ -110,13 +360,14 @@ class DeviceType:
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class DeviceType:
-    def __init__(self,
-                 pre_auth_session_id: str,
-                 failed_code_input_attempt_count: int,
-                 codes: List[DeviceCode],
-                 email: Union[str, None] = None,
-                 phone_number: Union[str, None] = None
-                 ):
+    def __init__(
+        self,
+        pre_auth_session_id: str,
+        failed_code_input_attempt_count: int,
+        codes: List[DeviceCode],
+        email: Union[str, None] = None,
+        phone_number: Union[str, None] = None,
+    ):
         self.pre_auth_session_id = pre_auth_session_id
         self.failed_code_input_attempt_count = failed_code_input_attempt_count
         self.codes = codes
@@ -124,9 +375,9 @@ class DeviceType:
         self.phone_number = phone_number</code></pre>
 </details>
 </dd>
-<dt id="supertokens_python.recipe.passwordless.types.User"><code class="flex name class">
-<span>class <span class="ident">User</span></span>
-<span>(</span><span>user_id: str, email: Optional[str], phone_number: Optional[str], time_joined: int)</span>
+<dt id="supertokens_python.recipe.passwordless.types.PasswordlessIngredients"><code class="flex name class">
+<span>class <span class="ident">PasswordlessIngredients</span></span>
+<span>(</span><span>email_delivery: Optional[<a title="supertokens_python.ingredients.emaildelivery.EmailDeliveryIngredient" href="../../ingredients/emaildelivery/index.html#supertokens_python.ingredients.emaildelivery.EmailDeliveryIngredient">EmailDeliveryIngredient</a>[<a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters">CreateAndSendCustomEmailParameters</a>]] = None, sms_delivery: Optional[<a title="supertokens_python.ingredients.smsdelivery.SMSDeliveryIngredient" href="../../ingredients/smsdelivery/index.html#supertokens_python.ingredients.smsdelivery.SMSDeliveryIngredient">SMSDeliveryIngredient</a>[<a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters">CreateAndSendCustomTextMessageParameters</a>]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -134,20 +385,21 @@ class DeviceType:
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">class User:
-    def __init__(self, user_id: str,
-                 email: Union[str, None], phone_number: Union[str, None], time_joined: int):
-        self.user_id: str = user_id
-        self.email: Union[str, None] = email
-        self.phone_number: Union[str, None] = phone_number
-        self.time_joined: int = time_joined</code></pre>
+<pre><code class="python">class PasswordlessIngredients:
+    def __init__(
+        self,
+        email_delivery: Union[EmailDeliveryIngredient[EmailTemplateVars], None] = None,
+        sms_delivery: Union[SMSDeliveryIngredient[SMSTemplateVars], None] = None,
+    ):
+        self.email_delivery = email_delivery
+        self.sms_delivery = sms_delivery</code></pre>
 </details>
 </dd>
 </dl>
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -160,13 +412,31 @@ class DeviceType:
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
 <li>
+<h4><code><a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters">CreateAndSendCustomEmailParameters</a></code></h4>
+</li>
+<li>
+<h4><code><a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters">CreateAndSendCustomEmailParameters</a></code></h4>
+</li>
+<li>
+<h4><code><a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomEmailParameters">CreateAndSendCustomEmailParameters</a></code></h4>
+</li>
+<li>
+<h4><code><a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters">CreateAndSendCustomTextMessageParameters</a></code></h4>
+</li>
+<li>
+<h4><code><a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters">CreateAndSendCustomTextMessageParameters</a></code></h4>
+</li>
+<li>
+<h4><code><a title="supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters" href="#supertokens_python.recipe.passwordless.types.CreateAndSendCustomTextMessageParameters">CreateAndSendCustomTextMessageParameters</a></code></h4>
+</li>
+<li>
 <h4><code><a title="supertokens_python.recipe.passwordless.types.DeviceCode" href="#supertokens_python.recipe.passwordless.types.DeviceCode">DeviceCode</a></code></h4>
 </li>
 <li>
 <h4><code><a title="supertokens_python.recipe.passwordless.types.DeviceType" href="#supertokens_python.recipe.passwordless.types.DeviceType">DeviceType</a></code></h4>
 </li>
 <li>
-<h4><code><a title="supertokens_python.recipe.passwordless.types.User" href="#supertokens_python.recipe.passwordless.types.User">User</a></code></h4>
+<h4><code><a title="supertokens_python.recipe.passwordless.types.PasswordlessIngredients" href="#supertokens_python.recipe.passwordless.types.PasswordlessIngredients">PasswordlessIngredients</a></code></h4>
 </li>
 </ul>
 </li>
@@ -174,7 +444,7 @@ class DeviceType:
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

@@ -11,88 +11,112 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from httpx import AsyncClient
+from typing_extensions import Literal
+
+from supertokens_python.framework import BaseRequest
+from supertokens_python.ingredients.emaildelivery.types import (
+    EmailDeliveryConfig,
+    EmailDeliveryConfigWithService,
+)
+from supertokens_python.recipe.emailverification.emaildelivery.services.backward_compatibility import (
+    BackwardCompatibilityService,
+)
 
 if TYPE_CHECKING:
+    from typing import Callable, Union
+
     from supertokens_python.supertokens import AppInfo
-    from .types import User
-    from .interfaces import RecipeInterface, APIInterface
-    from typing import Callable, Union, Awaitable
 
-from os import environ
-
-
-def default_get_email_verification_url(app_info: AppInfo) -> Callable[[User, Dict[str, Any]], Awaitable[str]]:
-    async def func(_: User, __: Dict[str, Any]):
-        return app_info.website_domain.get_as_string_dangerous(
-        ) + app_info.website_base_path.get_as_string_dangerous() + '/verify-email'
-    return func
-
-
-def default_create_and_send_custom_email(app_info: AppInfo) -> Callable[[User, str, Dict[str, Any]], Awaitable[None]]:
-    async def func(user: User, email_verification_url: str, _: Dict[str, Any]):
-        if ('SUPERTOKENS_ENV' not in environ) or (
-                environ['SUPERTOKENS_ENV'] != 'testing'):
-            return
-        try:
-            async with AsyncClient() as client:
-                await client.post('https://api.supertokens.io/0/st/auth/email/verify', json={'email': user.email, 'appName': app_info.app_name, 'emailVerifyURL': email_verification_url}, headers={'api-version': '0'})  # type: ignore
-        except Exception:
-            pass
-    return func
+    from .interfaces import APIInterface, RecipeInterface, TypeGetEmailForUserIdFunction
+    from .types import EmailTemplateVars, VerificationEmailTemplateVars
 
 
 class OverrideConfig:
-    def __init__(self, functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
-                 apis: Union[Callable[[APIInterface], APIInterface], None] = None):
+    def __init__(
+        self,
+        functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
+        apis: Union[Callable[[APIInterface], APIInterface], None] = None,
+    ):
         self.functions = functions
         self.apis = apis
 
 
-class ParentRecipeEmailVerificationConfig:
-    def __init__(self,
-                 get_email_for_user_id: Callable[[str, Dict[str, Any]], Awaitable[str]],
-                 override: Union[OverrideConfig, None] = None,
-                 get_email_verification_url: Union[Callable[[
-                     User, Dict[str, Any]], Awaitable[str]], None] = None,
-                 create_and_send_custom_email: Union[Callable[[
-                     User, str, Dict[str, Any]], Awaitable[None]], None] = None
-                 ):
-        self.override = override
-        self.get_email_verification_url = get_email_verification_url
-        self.create_and_send_custom_email = create_and_send_custom_email
-        self.get_email_for_user_id = get_email_for_user_id
+MODE_TYPE = Literal["REQUIRED", "OPTIONAL"]
 
 
 class EmailVerificationConfig:
-    def __init__(self,
-                 override: OverrideConfig,
-                 get_email_verification_url: Callable[[User, Dict[str, Any]], Awaitable[str]],
-                 create_and_send_custom_email: Callable[[User, str, Dict[str, Any]], Awaitable[None]],
-                 get_email_for_user_id: Callable[[str, Dict[str, Any]], Awaitable[str]]
-                 ):
-        self.get_email_for_user_id = get_email_for_user_id
-        self.get_email_verification_url = get_email_verification_url
-        self.create_and_send_custom_email = create_and_send_custom_email
+    def __init__(
+        self,
+        mode: MODE_TYPE,
+        get_email_delivery_config: Callable[
+            [], EmailDeliveryConfigWithService[VerificationEmailTemplateVars]
+        ],
+        get_email_for_recipe_user_id: Optional[TypeGetEmailForUserIdFunction],
+        override: OverrideConfig,
+    ):
+        self.mode = mode
         self.override = override
+        self.get_email_delivery_config = get_email_delivery_config
+        self.get_email_for_recipe_user_id = get_email_for_recipe_user_id
 
 
 def validate_and_normalise_user_input(
-        app_info: AppInfo, config: ParentRecipeEmailVerificationConfig):
-    get_email_verification_url = config.get_email_verification_url if config.get_email_verification_url is not None \
-        else default_get_email_verification_url(app_info)
-    create_and_send_custom_email = config.create_and_send_custom_email if config.create_and_send_custom_email is not None \
-        else default_create_and_send_custom_email(app_info)
-    override = config.override
+    app_info: AppInfo,
+    mode: MODE_TYPE,
+    email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None,
+    get_email_for_recipe_user_id: Optional[TypeGetEmailForUserIdFunction] = None,
+    override: Union[OverrideConfig, None] = None,
+) -> EmailVerificationConfig:
+    if mode not in ["REQUIRED", "OPTIONAL"]:
+        raise ValueError(
+            "Email Verification recipe mode must be one of 'REQUIRED' or 'OPTIONAL'"
+        )
+
+    def get_email_delivery_config() -> EmailDeliveryConfigWithService[
+        VerificationEmailTemplateVars
+    ]:
+        email_service = email_delivery.service if email_delivery is not None else None
+        if email_service is None:
+            email_service = BackwardCompatibilityService(app_info)
+
+        if email_delivery is not None and email_delivery.override is not None:
+            override = email_delivery.override
+        else:
+            override = None
+        return EmailDeliveryConfigWithService(email_service, override=override)
+
+    if override is not None and not isinstance(override, OverrideConfig):  # type: ignore
+        raise ValueError("override must be of type OverrideConfig or None")
+
     if override is None:
         override = OverrideConfig()
+
     return EmailVerificationConfig(
-        override=override,
-        get_email_for_user_id=config.get_email_for_user_id,
-        create_and_send_custom_email=create_and_send_custom_email,
-        get_email_verification_url=get_email_verification_url
+        mode,
+        get_email_delivery_config,
+        get_email_for_recipe_user_id,
+        override,
+    )
+
+
+def get_email_verify_link(
+    app_info: AppInfo,
+    token: str,
+    tenant_id: str,
+    request: Optional[BaseRequest],
+    user_context: Dict[str, Any],
+) -> str:
+    return (
+        app_info.get_origin(request, user_context).get_as_string_dangerous()
+        + app_info.website_base_path.get_as_string_dangerous()
+        + "/verify-email"
+        + "?token="
+        + token
+        + "&tenantId="
+        + tenant_id
     )

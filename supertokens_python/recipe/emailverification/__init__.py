@@ -13,14 +13,22 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
+from ...ingredients.emaildelivery.types import EmailDeliveryConfig
 from . import exceptions as ex
+from . import recipe, types, utils
+from .emaildelivery import services as emaildelivery_services
+from .interfaces import TypeGetEmailForUserIdFunction
 from .recipe import EmailVerificationRecipe
-from . import utils
+from .types import EmailTemplateVars
+from .utils import MODE_TYPE, OverrideConfig
+
 InputOverrideConfig = utils.OverrideConfig
-ParentRecipeEmailVerificationConfig = utils.ParentRecipeEmailVerificationConfig
 exception = ex
+SMTPService = emaildelivery_services.SMTPService
+EmailVerificationClaim = recipe.EmailVerificationClaim
+EmailDeliveryInterface = types.EmailDeliveryInterface
 
 
 if TYPE_CHECKING:
@@ -29,5 +37,15 @@ if TYPE_CHECKING:
     from ...recipe_module import RecipeModule
 
 
-def init(config: ParentRecipeEmailVerificationConfig) -> Callable[[AppInfo], RecipeModule]:
-    return EmailVerificationRecipe.init(config)
+def init(
+    mode: MODE_TYPE,
+    email_delivery: Union[EmailDeliveryConfig[EmailTemplateVars], None] = None,
+    get_email_for_recipe_user_id: Optional[TypeGetEmailForUserIdFunction] = None,
+    override: Union[OverrideConfig, None] = None,
+) -> Callable[[AppInfo], RecipeModule]:
+    return EmailVerificationRecipe.init(
+        mode,
+        email_delivery,
+        get_email_for_recipe_user_id,
+        override,
+    )

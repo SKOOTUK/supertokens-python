@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.emailverification.asyncio API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -38,40 +38,241 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
-from supertokens_python.recipe.emailverification.recipe import \
-    EmailVerificationRecipe
+from supertokens_python import get_request_from_user_context
+from supertokens_python.recipe.emailverification.interfaces import (
+    CreateEmailVerificationLinkEmailAlreadyVerifiedError,
+    CreateEmailVerificationLinkOkResult,
+    CreateEmailVerificationTokenEmailAlreadyVerifiedError,
+    CreateEmailVerificationTokenOkResult,
+    EmailDoesNotExistError,
+    GetEmailForUserIdOkResult,
+    RevokeEmailVerificationTokensOkResult,
+    SendEmailVerificationEmailAlreadyVerifiedError,
+    SendEmailVerificationEmailOkResult,
+    UnverifyEmailOkResult,
+)
+from supertokens_python.recipe.emailverification.recipe import EmailVerificationRecipe
+from supertokens_python.recipe.emailverification.types import (
+    EmailTemplateVars,
+    VerificationEmailTemplateVars,
+    VerificationEmailTemplateVarsUser,
+)
+from supertokens_python.recipe.emailverification.utils import get_email_verify_link
+from supertokens_python.types import RecipeUserId
 
 
-async def create_email_verification_token(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
+async def create_email_verification_token(
+    tenant_id: str,
+    recipe_user_id: RecipeUserId,
+    email: Optional[str] = None,
+    user_context: Union[None, Dict[str, Any]] = None,
+) -&gt; Union[
+    CreateEmailVerificationTokenOkResult,
+    CreateEmailVerificationTokenEmailAlreadyVerifiedError,
+]:
     if user_context is None:
         user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.create_email_verification_token(user_id, email, user_context)
+    recipe = EmailVerificationRecipe.get_instance_or_throw()
+    if email is None:
+        email_info = await recipe.get_email_for_recipe_user_id(
+            None, recipe_user_id, user_context
+        )
+        if isinstance(email_info, GetEmailForUserIdOkResult):
+            email = email_info.email
+        elif isinstance(email_info, EmailDoesNotExistError):
+            return CreateEmailVerificationTokenEmailAlreadyVerifiedError()
+        else:
+            raise Exception(&#34;Unknown User ID provided without email&#34;)
+
+    return await recipe.recipe_implementation.create_email_verification_token(
+        recipe_user_id, email, tenant_id, user_context
+    )
 
 
-async def verify_email_using_token(token: str, user_context: Union[None, Dict[str, Any]] = None):
+async def verify_email_using_token(
+    tenant_id: str,
+    token: str,
+    attempt_account_linking: bool = True,
+    user_context: Union[None, Dict[str, Any]] = None,
+):
     if user_context is None:
         user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.verify_email_using_token(token, user_context)
+    return await EmailVerificationRecipe.get_instance_or_throw().recipe_implementation.verify_email_using_token(
+        token, tenant_id, attempt_account_linking, user_context
+    )
 
 
-async def is_email_verified(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
+async def is_email_verified(
+    recipe_user_id: RecipeUserId,
+    email: Optional[str] = None,
+    user_context: Union[None, Dict[str, Any]] = None,
+):
     if user_context is None:
         user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.is_email_verified(user_id, email, user_context)
+
+    recipe = EmailVerificationRecipe.get_instance_or_throw()
+    if email is None:
+        email_info = await recipe.get_email_for_recipe_user_id(
+            None, recipe_user_id, user_context
+        )
+        if isinstance(email_info, GetEmailForUserIdOkResult):
+            email = email_info.email
+        elif isinstance(email_info, EmailDoesNotExistError):
+            return True
+        else:
+            raise Exception(&#34;Unknown User ID provided without email&#34;)
+
+    return await recipe.recipe_implementation.is_email_verified(
+        recipe_user_id, email, user_context
+    )
 
 
-async def unverify_email(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
+async def revoke_email_verification_tokens(
+    tenant_id: str,
+    recipe_user_id: RecipeUserId,
+    email: Optional[str] = None,
+    user_context: Optional[Dict[str, Any]] = None,
+) -&gt; RevokeEmailVerificationTokensOkResult:
     if user_context is None:
         user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.unverify_email(user_id, email, user_context)
+
+    recipe = EmailVerificationRecipe.get_instance_or_throw()
+    if email is None:
+        email_info = await recipe.get_email_for_recipe_user_id(
+            None, recipe_user_id, user_context
+        )
+        if isinstance(email_info, GetEmailForUserIdOkResult):
+            email = email_info.email
+        elif isinstance(email_info, EmailDoesNotExistError):
+            return RevokeEmailVerificationTokensOkResult()
+        else:
+            raise Exception(&#34;Unknown User ID provided without email&#34;)
+
+    return await EmailVerificationRecipe.get_instance_or_throw().recipe_implementation.revoke_email_verification_tokens(
+        recipe_user_id, email, tenant_id, user_context
+    )
 
 
-async def revoke_email_verification_tokens(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
+async def unverify_email(
+    recipe_user_id: RecipeUserId,
+    email: Optional[str] = None,
+    user_context: Union[None, Dict[str, Any]] = None,
+):
     if user_context is None:
         user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.revoke_email_verification_tokens(user_id, email, user_context)</code></pre>
+
+    recipe = EmailVerificationRecipe.get_instance_or_throw()
+    if email is None:
+        email_info = await recipe.get_email_for_recipe_user_id(
+            None, recipe_user_id, user_context
+        )
+        if isinstance(email_info, GetEmailForUserIdOkResult):
+            email = email_info.email
+        elif isinstance(email_info, EmailDoesNotExistError):
+            # Here we are returning OK since that&#39;s how it used to work, but a later call
+            # to is_verified will still return true
+            return UnverifyEmailOkResult
+        else:
+            raise Exception(&#34;Unknown User ID provided without email&#34;)
+
+    return await EmailVerificationRecipe.get_instance_or_throw().recipe_implementation.unverify_email(
+        recipe_user_id, email, user_context
+    )
+
+
+async def send_email(
+    input_: EmailTemplateVars,
+    user_context: Union[None, Dict[str, Any]] = None,
+):
+    if user_context is None:
+        user_context = {}
+    return await EmailVerificationRecipe.get_instance_or_throw().email_delivery.ingredient_interface_impl.send_email(
+        input_, user_context
+    )
+
+
+async def create_email_verification_link(
+    tenant_id: str,
+    recipe_user_id: RecipeUserId,
+    email: Optional[str],
+    user_context: Optional[Dict[str, Any]] = None,
+) -&gt; Union[
+    CreateEmailVerificationLinkOkResult,
+    CreateEmailVerificationLinkEmailAlreadyVerifiedError,
+]:
+    if user_context is None:
+        user_context = {}
+
+    recipe_instance = EmailVerificationRecipe.get_instance_or_throw()
+    app_info = recipe_instance.get_app_info()
+
+    email_verification_token = await create_email_verification_token(
+        tenant_id, recipe_user_id, email, user_context
+    )
+    if isinstance(
+        email_verification_token, CreateEmailVerificationTokenEmailAlreadyVerifiedError
+    ):
+        return CreateEmailVerificationLinkEmailAlreadyVerifiedError()
+
+    request = get_request_from_user_context(user_context)
+    return CreateEmailVerificationLinkOkResult(
+        link=get_email_verify_link(
+            app_info,
+            email_verification_token.token,
+            tenant_id,
+            request,
+            user_context,
+        )
+    )
+
+
+async def send_email_verification_email(
+    tenant_id: str,
+    user_id: str,
+    recipe_user_id: RecipeUserId,
+    email: Optional[str],
+    user_context: Optional[Dict[str, Any]] = None,
+) -&gt; Union[
+    SendEmailVerificationEmailOkResult,
+    SendEmailVerificationEmailAlreadyVerifiedError,
+]:
+    if user_context is None:
+        user_context = {}
+
+    if email is None:
+        recipe_instance = EmailVerificationRecipe.get_instance_or_throw()
+
+        email_info = await recipe_instance.get_email_for_recipe_user_id(
+            None, recipe_user_id, user_context
+        )
+        if isinstance(email_info, GetEmailForUserIdOkResult):
+            email = email_info.email
+        elif isinstance(email_info, EmailDoesNotExistError):
+            return SendEmailVerificationEmailAlreadyVerifiedError()
+        else:
+            raise Exception(&#34;Unknown User ID provided without email&#34;)
+
+    email_verification_link = await create_email_verification_link(
+        tenant_id, recipe_user_id, email, user_context
+    )
+
+    if isinstance(
+        email_verification_link, CreateEmailVerificationLinkEmailAlreadyVerifiedError
+    ):
+        return SendEmailVerificationEmailAlreadyVerifiedError()
+
+    await send_email(
+        VerificationEmailTemplateVars(
+            user=VerificationEmailTemplateVarsUser(user_id, recipe_user_id, email),
+            email_verify_link=email_verification_link.link,
+            tenant_id=tenant_id,
+        ),
+        user_context,
+    )
+
+    return SendEmailVerificationEmailOkResult()</code></pre>
 </details>
 </section>
 <section>
@@ -81,80 +282,53 @@ async def revoke_email_verification_tokens(user_id: str, email: str, user_contex
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="supertokens_python.recipe.emailverification.asyncio.create_email_verification_token"><code class="name flex">
-<span>async def <span class="ident">create_email_verification_token</span></span>(<span>user_id: str, email: str, user_context: Optional[None] = None)</span>
+<dt id="supertokens_python.recipe.emailverification.asyncio.create_email_verification_link"><code class="name flex">
+<span>async def <span class="ident">create_email_verification_link</span></span>(<span>tenant_id: str, recipe_user_id: <a title="supertokens_python.types.RecipeUserId" href="../../../types.html#supertokens_python.types.RecipeUserId">RecipeUserId</a>, email: Optional[str], user_context: Optional[Dict[str, Any]] = None) ‑> Union[<a title="supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationLinkOkResult" href="../interfaces.html#supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationLinkOkResult">CreateEmailVerificationLinkOkResult</a>, <a title="supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationLinkEmailAlreadyVerifiedError" href="../interfaces.html#supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationLinkEmailAlreadyVerifiedError">CreateEmailVerificationLinkEmailAlreadyVerifiedError</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def create_email_verification_token(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.create_email_verification_token(user_id, email, user_context)</code></pre>
-</details>
+</dd>
+<dt id="supertokens_python.recipe.emailverification.asyncio.create_email_verification_token"><code class="name flex">
+<span>async def <span class="ident">create_email_verification_token</span></span>(<span>tenant_id: str, recipe_user_id: <a title="supertokens_python.types.RecipeUserId" href="../../../types.html#supertokens_python.types.RecipeUserId">RecipeUserId</a>, email: Optional[str] = None, user_context: Optional[Dict[str, Any]] = None) ‑> Union[<a title="supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationTokenOkResult" href="../interfaces.html#supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationTokenOkResult">CreateEmailVerificationTokenOkResult</a>, <a title="supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationTokenEmailAlreadyVerifiedError" href="../interfaces.html#supertokens_python.recipe.emailverification.interfaces.CreateEmailVerificationTokenEmailAlreadyVerifiedError">CreateEmailVerificationTokenEmailAlreadyVerifiedError</a>]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
 </dd>
 <dt id="supertokens_python.recipe.emailverification.asyncio.is_email_verified"><code class="name flex">
-<span>async def <span class="ident">is_email_verified</span></span>(<span>user_id: str, email: str, user_context: Optional[None] = None)</span>
+<span>async def <span class="ident">is_email_verified</span></span>(<span>recipe_user_id: <a title="supertokens_python.types.RecipeUserId" href="../../../types.html#supertokens_python.types.RecipeUserId">RecipeUserId</a>, email: Optional[str] = None, user_context: Optional[Dict[str, Any]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def is_email_verified(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.is_email_verified(user_id, email, user_context)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.emailverification.asyncio.revoke_email_verification_tokens"><code class="name flex">
-<span>async def <span class="ident">revoke_email_verification_tokens</span></span>(<span>user_id: str, email: str, user_context: Optional[None] = None)</span>
+<span>async def <span class="ident">revoke_email_verification_tokens</span></span>(<span>tenant_id: str, recipe_user_id: <a title="supertokens_python.types.RecipeUserId" href="../../../types.html#supertokens_python.types.RecipeUserId">RecipeUserId</a>, email: Optional[str] = None, user_context: Optional[Dict[str, Any]] = None) ‑> <a title="supertokens_python.recipe.emailverification.interfaces.RevokeEmailVerificationTokensOkResult" href="../interfaces.html#supertokens_python.recipe.emailverification.interfaces.RevokeEmailVerificationTokensOkResult">RevokeEmailVerificationTokensOkResult</a></span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def revoke_email_verification_tokens(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.revoke_email_verification_tokens(user_id, email, user_context)</code></pre>
-</details>
+</dd>
+<dt id="supertokens_python.recipe.emailverification.asyncio.send_email"><code class="name flex">
+<span>async def <span class="ident">send_email</span></span>(<span>input_: <a title="supertokens_python.recipe.emailverification.types.VerificationEmailTemplateVars" href="../types.html#supertokens_python.recipe.emailverification.types.VerificationEmailTemplateVars">VerificationEmailTemplateVars</a>, user_context: Optional[Dict[str, Any]] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="supertokens_python.recipe.emailverification.asyncio.send_email_verification_email"><code class="name flex">
+<span>async def <span class="ident">send_email_verification_email</span></span>(<span>tenant_id: str, user_id: str, recipe_user_id: <a title="supertokens_python.types.RecipeUserId" href="../../../types.html#supertokens_python.types.RecipeUserId">RecipeUserId</a>, email: Optional[str], user_context: Optional[Dict[str, Any]] = None) ‑> Union[<a title="supertokens_python.recipe.emailverification.interfaces.SendEmailVerificationEmailOkResult" href="../interfaces.html#supertokens_python.recipe.emailverification.interfaces.SendEmailVerificationEmailOkResult">SendEmailVerificationEmailOkResult</a>, <a title="supertokens_python.recipe.emailverification.interfaces.SendEmailVerificationEmailAlreadyVerifiedError" href="../interfaces.html#supertokens_python.recipe.emailverification.interfaces.SendEmailVerificationEmailAlreadyVerifiedError">SendEmailVerificationEmailAlreadyVerifiedError</a>]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
 </dd>
 <dt id="supertokens_python.recipe.emailverification.asyncio.unverify_email"><code class="name flex">
-<span>async def <span class="ident">unverify_email</span></span>(<span>user_id: str, email: str, user_context: Optional[None] = None)</span>
+<span>async def <span class="ident">unverify_email</span></span>(<span>recipe_user_id: <a title="supertokens_python.types.RecipeUserId" href="../../../types.html#supertokens_python.types.RecipeUserId">RecipeUserId</a>, email: Optional[str] = None, user_context: Optional[Dict[str, Any]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def unverify_email(user_id: str, email: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.unverify_email(user_id, email, user_context)</code></pre>
-</details>
 </dd>
 <dt id="supertokens_python.recipe.emailverification.asyncio.verify_email_using_token"><code class="name flex">
-<span>async def <span class="ident">verify_email_using_token</span></span>(<span>token: str, user_context: Optional[None] = None)</span>
+<span>async def <span class="ident">verify_email_using_token</span></span>(<span>tenant_id: str, token: str, attempt_account_linking: bool = True, user_context: Optional[Dict[str, Any]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def verify_email_using_token(token: str, user_context: Union[None, Dict[str, Any]] = None):
-    if user_context is None:
-        user_context = {}
-    return await EmailVerificationRecipe.get_instance().recipe_implementation.verify_email_using_token(token, user_context)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -162,7 +336,7 @@ async def revoke_email_verification_tokens(user_id: str, email: str, user_contex
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -174,9 +348,12 @@ async def revoke_email_verification_tokens(user_id: str, email: str, user_contex
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
+<li><code><a title="supertokens_python.recipe.emailverification.asyncio.create_email_verification_link" href="#supertokens_python.recipe.emailverification.asyncio.create_email_verification_link">create_email_verification_link</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.asyncio.create_email_verification_token" href="#supertokens_python.recipe.emailverification.asyncio.create_email_verification_token">create_email_verification_token</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.asyncio.is_email_verified" href="#supertokens_python.recipe.emailverification.asyncio.is_email_verified">is_email_verified</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.asyncio.revoke_email_verification_tokens" href="#supertokens_python.recipe.emailverification.asyncio.revoke_email_verification_tokens">revoke_email_verification_tokens</a></code></li>
+<li><code><a title="supertokens_python.recipe.emailverification.asyncio.send_email" href="#supertokens_python.recipe.emailverification.asyncio.send_email">send_email</a></code></li>
+<li><code><a title="supertokens_python.recipe.emailverification.asyncio.send_email_verification_email" href="#supertokens_python.recipe.emailverification.asyncio.send_email_verification_email">send_email_verification_email</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.asyncio.unverify_email" href="#supertokens_python.recipe.emailverification.asyncio.unverify_email">unverify_email</a></code></li>
 <li><code><a title="supertokens_python.recipe.emailverification.asyncio.verify_email_using_token" href="#supertokens_python.recipe.emailverification.asyncio.verify_email_using_token">verify_email_using_token</a></code></li>
 </ul>
@@ -185,7 +362,7 @@ async def revoke_email_verification_tokens(user_id: str, email: str, user_contex
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

@@ -13,11 +13,10 @@
 # under the License.
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Union
+from typing import Any, Dict, Literal, Optional
 
 
 class BaseResponse(ABC):
-
     @abstractmethod
     def __init__(self, content: Dict[str, Any], status_code: int = 200):
         self.content = content
@@ -25,23 +24,30 @@ class BaseResponse(ABC):
         self.wrapper_used = True
 
     @abstractmethod
-    def set_cookie(self, key: str,
-                   value: str,
-                   #    max_age: Union[int, None] = None,
-                   expires: int,
-                   path: str = "/",
-                   domain: Union[str, None] = None,
-                   secure: bool = False,
-                   httponly: bool = False,
-                   samesite: str = "lax"):
+    def set_cookie(
+        self,
+        key: str,
+        value: str,
+        #    max_age: Union[int, None] = None,
+        expires: int,
+        path: str = "/",
+        domain: Optional[str] = None,
+        secure: bool = False,
+        httponly: bool = False,
+        samesite: Literal["lax", "strict", "none"] = "lax",
+    ):
         pass
 
     @abstractmethod
-    def set_header(self, key: str, value: str):
+    def set_header(self, key: str, value: str) -> None:
         pass
 
     @abstractmethod
-    def get_header(self, key: str) -> Union[str, None]:
+    def get_header(self, key: str) -> Optional[str]:
+        pass
+
+    @abstractmethod
+    def remove_header(self, key: str) -> None:
         pass
 
     @abstractmethod
@@ -54,4 +60,8 @@ class BaseResponse(ABC):
 
     @abstractmethod
     def set_html_content(self, content: str):
+        pass
+
+    @abstractmethod
+    def redirect(self, url: str) -> "BaseResponse":
         pass

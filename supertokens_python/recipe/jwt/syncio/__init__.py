@@ -11,21 +11,29 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
 from supertokens_python.async_to_sync_wrapper import sync
 from supertokens_python.recipe.jwt import asyncio
-from supertokens_python.recipe.jwt.interfaces import (CreateJwtResult,
-                                                      GetJWKSResult)
+from supertokens_python.recipe.jwt.interfaces import (
+    CreateJwtOkResult,
+    CreateJwtResultUnsupportedAlgorithm,
+    GetJWKSResult,
+)
 
 
-def create_jwt(payload: Union[None, Dict[str, Any]] = None, validity_seconds: Union[None, int] = None, user_context: Union[Dict[str, Any], None] = None) -> CreateJwtResult:
-    if user_context is None:
-        user_context = {}
-    return sync(asyncio.create_jwt(payload, validity_seconds, user_context))
+def create_jwt(
+    payload: Optional[Dict[str, Any]] = None,
+    validity_seconds: Optional[int] = None,
+    use_static_signing_key: Optional[bool] = None,
+    user_context: Optional[Dict[str, Any]] = None,
+) -> Union[CreateJwtOkResult, CreateJwtResultUnsupportedAlgorithm]:
+    return sync(
+        asyncio.create_jwt(
+            payload, validity_seconds, use_static_signing_key, user_context
+        )
+    )
 
 
-def get_jwks(user_context: Union[Dict[str, Any], None] = None) -> GetJWKSResult:
-    if user_context is None:
-        user_context = {}
+def get_jwks(user_context: Optional[Dict[str, Any]] = None) -> GetJWKSResult:
     return sync(asyncio.get_jwks(user_context))

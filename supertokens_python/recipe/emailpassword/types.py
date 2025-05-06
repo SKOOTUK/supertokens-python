@@ -11,22 +11,16 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from typing import Awaitable, Callable, List, Union
+from __future__ import annotations
 
+from typing import Any, Awaitable, Callable, Dict, Optional, TypeVar, Union
 
-class User:
-    def __init__(self, user_id: str, email: str, time_joined: int):
-        self.user_id: str = user_id
-        self.email: str = email
-        self.time_joined: int = time_joined
-        self.third_party_info: None = None
-
-
-class UsersResponse:
-    def __init__(self, users: List[User],
-                 next_pagination_token: Union[str, None]):
-        self.users = users
-        self.next_pagination_token = next_pagination_token
+from supertokens_python.ingredients.emaildelivery import EmailDeliveryIngredient
+from supertokens_python.ingredients.emaildelivery.types import (
+    EmailDeliveryInterface,
+    SMTPServiceInterface,
+)
+from supertokens_python.types import RecipeUserId
 
 
 class ErrorFormField:
@@ -36,22 +30,99 @@ class ErrorFormField:
 
 
 class FormField:
-    def __init__(self, id: str, value: str):  # pylint: disable=redefined-builtin
+    def __init__(self, id: str, value: Any):  # pylint: disable=redefined-builtin
         self.id: str = id
-        self.value: str = value
+        self.value: Any = value
+
+    def to_json(self) -> Dict[str, Any]:
+        return {"id": self.id, "value": self.value}
 
 
 class InputFormField:
-    def __init__(self, id: str, validate: Union[Callable[[  # pylint: disable=redefined-builtin
-                 str], Awaitable[Union[str, None]]], None] = None, optional: Union[bool, None] = None):
+    def __init__(
+        self,
+        id: str,  # pylint: disable=redefined-builtin
+        validate: Union[
+            Callable[[str, str], Awaitable[Union[str, None]]],
+            None,
+        ] = None,
+        optional: Union[bool, None] = None,
+    ):
         self.id = id
         self.validate = validate
         self.optional = optional
 
 
 class NormalisedFormField:
-    def __init__(self, id: str, validate: Callable[[  # pylint: disable=redefined-builtin
-                 str], Awaitable[Union[str, None]]], optional: bool):
+    def __init__(
+        self,
+        id: str,  # pylint: disable=redefined-builtin
+        validate: Callable[[str, str], Awaitable[Union[str, None]]],
+        optional: bool,
+    ):
         self.id = id
         self.validate = validate
         self.optional = optional
+
+
+_T = TypeVar("_T")
+
+
+class PasswordResetEmailTemplateVarsUser:
+    def __init__(
+        self, user_id: str, recipe_user_id: Optional[RecipeUserId], email: str
+    ):
+        self.id = user_id
+        self.recipe_user_id = recipe_user_id
+        self.email = email
+
+    def to_json(self) -> Dict[str, Any]:
+        resp_json = {
+            "id": self.id,
+            "recipeUserId": (
+                self.recipe_user_id.get_as_string()
+                if self.recipe_user_id is not None
+                else None
+            ),
+            "email": self.email,
+        }
+        # Remove items that are None
+        return {k: v for k, v in resp_json.items() if v is not None}
+
+
+class PasswordResetEmailTemplateVars:
+    def __init__(
+        self,
+        user: PasswordResetEmailTemplateVarsUser,
+        password_reset_link: str,
+        tenant_id: str,
+    ) -> None:
+        self.user = user
+        self.password_reset_link = password_reset_link
+        self.tenant_id = tenant_id
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "type": "PASSWORD_RESET",
+            "user": self.user.to_json(),
+            "passwordResetLink": self.password_reset_link,
+            "tenantId": self.tenant_id,
+        }
+
+
+# Export:
+EmailTemplateVars = PasswordResetEmailTemplateVars
+
+# PasswordResetEmailTemplateVars (Already exported because it's defined in the same)
+
+SMTPOverrideInput = SMTPServiceInterface[EmailTemplateVars]
+
+EmailDeliveryOverrideInput = EmailDeliveryInterface[EmailTemplateVars]
+
+
+class EmailPasswordIngredients:
+    def __init__(
+        self,
+        email_delivery: Union[EmailDeliveryIngredient[EmailTemplateVars], None] = None,
+    ) -> None:
+        self.email_delivery = email_delivery

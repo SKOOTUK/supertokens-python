@@ -9,37 +9,58 @@ with open(path.join(here, "README.md"), mode="r", encoding="utf-8") as f:
     long_description = f.read()
 
 extras_require = {
-    'dev': ([
-        'pytest==6.2.5',
-        'autopep8==1.5.6',
-        'PyYAML==5.4.1',
-        'uvicorn==0.13.4',
-        'requests==2.25.1',
-        'pytest-asyncio==0.14.0',
-        'nest-asyncio==1.5.1',
-        'python-dotenv==0.19.2',
-        'pdoc3==0.10.0',
-        'tzdata==2021.5',
-        'pylint==2.12.2',
-        'isort==5.10.1',
-        'pyright==0.0.13',
-    ]),
-    'fastapi': ([
-        'respx==0.16.3',
-        'Fastapi==0.68.1'
-    ]),
-    'flask': ([
-        'flask_cors',
-        'Flask==2.0.2'
-    ]),
-    'django': ([
-        'django-cors-headers==3.11.0',
-        'django==3.2.12',
-        'django-stubs==1.9.0'
-    ]),
+    # we want to fix the versions of the libraries that
+    # we use to develop the SDK with otherwise we get
+    # a bunch of type errors on make dev-install depending
+    # on changes in these frameworks
+    "fastapi": (
+        [
+            "fastapi",
+            "uvicorn",
+            "python-dotenv==1.0.1",
+        ]
+    ),
+    "flask": (
+        [
+            "flask-cors",
+            "flask",
+            "python-dotenv==1.0.1",
+        ]
+    ),
+    "django": (
+        [
+            "django-cors-headers",
+            "django>=3",
+            "django-stubs",
+            "uvicorn",
+            "python-dotenv==1.0.1",
+        ]
+    ),
+    "django2x": (
+        [
+            "django-cors-headers==3.11.0",
+            "django>=2,<3",
+            "django-stubs==1.9.0",
+            "gunicorn",
+            "python-dotenv==1.0.1",
+        ]
+    ),
+    "drf": (
+        [
+            "adrf",
+            "django-cors-headers",
+            "django>=4",
+            "django-stubs",
+            "djangorestframework",
+            "gunicorn",
+            "uvicorn",
+            "python-dotenv==1.0.1",
+            "tzdata",
+        ]
+    ),
     'falcon': ([
         'falcon==3.0.1'
-    ])
+    ]),
 }
 
 exclude_list = [
@@ -57,28 +78,35 @@ exclude_list = [
     "html",
     "pyrightconfig.json",
     "Makefile",
-    ".pylintrc"
+    ".pylintrc",
+    "dev-requirements.txt",
+    "docs-templates",
 ]
 
 setup(
     name="supertokens_python",
-    version="0.5.1",
+    version="0.29.1",
     author="SuperTokens",
     license="Apache 2.0",
-    author_email="team@supertokens.io",
-    description="SuperTokens session management solution for Python",
+    author_email="team@supertokens.com",
+    description="SuperTokens SDK for Python",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/supertokens/supertokens-python",
     packages=find_packages(exclude=exclude_list),
-    package_data = {'supertokens_python': ['py.typed']},
+    package_data={
+        "supertokens_python": [
+            "py.typed",
+        ]
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Intended Audience :: Developers",
         "Topic :: Internet :: WWW/HTTP :: Session",
         "License :: OSI Approved :: Apache Software License",
@@ -87,20 +115,23 @@ setup(
     ],
     keywords="",
     install_requires=[
-        "PyJWT==2.0.*",
-        "httpx==0.15.*",
-        "pycryptodome==3.10.*",
-        'jsonschema==3.2.0',
-        "tldextract==3.1.0",
-        "asgiref==3.4.1",
-        "werkzeug==2.0.1",
-        'starlette~=0.14.2',
-        'typing_extensions==4.1.1',
-        'Deprecated==1.2.13',
-        'cryptography==35.0',
-        'phonenumbers==8.12'
+        # [crypto] ensures that it installs the `cryptography` library as well
+        # based on constraints specified in https://github.com/jpadilla/pyjwt/blob/master/setup.cfg#L50
+        "PyJWT[crypto]>=2.5.0,<3.0.0",
+        "httpx>=0.15.0,<1.0.0",
+        "pycryptodome<3.21.0",
+        "tldextract<6.0.0",
+        "asgiref>=3.4.1,<4",
+        "typing_extensions>=4.1.1,<5.0.0",
+        "Deprecated<1.3.0",
+        "phonenumbers<9",
+        "twilio<10",
+        "aiosmtplib>=1.1.6,<4.0.0",
+        "pkce<1.1.0",
+        "pyotp<3",
+        "python-dateutil<3",
     ],
-    python_requires='>=3.7',
+    python_requires=">=3.8",
     include_package_data=True,
-    extras_require=extras_require
+    extras_require=extras_require,
 )

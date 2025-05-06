@@ -13,34 +13,61 @@
 # under the License.
 from __future__ import annotations
 
+from typing import Any, Dict
+
 from supertokens_python.exceptions import raise_bad_input_exception
 from supertokens_python.recipe.emailverification.interfaces import (
-    APIInterface, APIOptions)
-from supertokens_python.utils import normalise_http_method
+    APIInterface,
+    APIOptions,
+)
+from supertokens_python.recipe.session.asyncio import get_session
+from supertokens_python.utils import (
+    normalise_http_method,
+    send_200_response,
+)
 
 
-async def handle_email_verify_api(api_implementation: APIInterface, api_options: APIOptions):
-    if normalise_http_method(api_options.request.method()) == 'post':
+async def handle_email_verify_api(
+    api_implementation: APIInterface,
+    tenant_id: str,
+    api_options: APIOptions,
+    user_context: Dict[str, Any],
+):
+    if normalise_http_method(api_options.request.method()) == "post":
         if api_implementation.disable_email_verify_post:
             return None
         body = await api_options.request.json()
         if body is None:
-            raise_bad_input_exception(
-                'Please pass JSON input body')
-        if 'token' not in body:
-            raise_bad_input_exception(
-                'Please provide the email verification token')
-        if not isinstance(body['token'], str):
-            raise_bad_input_exception(
-                'The email verification token must be a string')
+            raise_bad_input_exception("Please pass JSON input body")
+        if "token" not in body:
+            raise_bad_input_exception("Please provide the email verification token")
+        if not isinstance(body["token"], str):
+            raise_bad_input_exception("The email verification token must be a string")
 
-        token = body['token']
-        result = await api_implementation.email_verify_post(token, api_options, {})
+        token = body["token"]
+
+        session = await get_session(
+            api_options.request,
+            session_required=False,
+            override_global_claim_validators=lambda _, __, ___: [],
+            user_context=user_context,
+        )
+
+        result = await api_implementation.email_verify_post(
+            token, session, tenant_id, api_options, user_context
+        )
     else:
         if api_implementation.disable_is_email_verified_get:
             return None
 
-        result = await api_implementation.is_email_verified_get(api_options, {})
+        session = await get_session(
+            api_options.request,
+            override_global_claim_validators=lambda _, __, ___: [],
+            user_context=user_context,
+        )
+        assert session is not None
+        result = await api_implementation.is_email_verified_get(
+            session, api_options, user_context
+        )
 
-    api_options.response.set_json_content(result.to_json())
-    return api_options.response
+    return send_200_response(result.to_json(), api_options.response)

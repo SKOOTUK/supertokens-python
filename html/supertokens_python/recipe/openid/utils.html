@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.openid.utils API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -44,43 +44,54 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Union
 
 if TYPE_CHECKING:
-    from .interfaces import RecipeInterface, APIInterface
     from supertokens_python import AppInfo
     from supertokens_python.recipe.jwt import OverrideConfig as JWTOverrideConfig
+
+    from .interfaces import APIInterface, RecipeInterface
 
 from supertokens_python.normalised_url_domain import NormalisedURLDomain
 from supertokens_python.normalised_url_path import NormalisedURLPath
 
 
 class InputOverrideConfig:
-    def __init__(self, functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
-                 apis: Union[Callable[[APIInterface],
-                                      APIInterface], None] = None,
-                 jwt_feature: Union[JWTOverrideConfig, None] = None):
+    def __init__(
+        self,
+        functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
+        apis: Union[Callable[[APIInterface], APIInterface], None] = None,
+        jwt_feature: Union[JWTOverrideConfig, None] = None,
+    ):
         self.functions = functions
         self.apis = apis
         self.jwt_feature = jwt_feature
 
 
 class OverrideConfig:
-    def __init__(self, functions: Union[Callable[[RecipeInterface], RecipeInterface],
-                                        None] = None, apis: Union[Callable[[APIInterface], APIInterface], None] = None):
+    def __init__(
+        self,
+        functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
+        apis: Union[Callable[[APIInterface], APIInterface], None] = None,
+    ):
         self.functions = functions
         self.apis = apis
 
 
 class OpenIdConfig:
-    def __init__(self, override: OverrideConfig,
-                 issuer_domain: NormalisedURLDomain, issuer_path: NormalisedURLPath):
+    def __init__(
+        self,
+        override: OverrideConfig,
+        issuer_domain: NormalisedURLDomain,
+        issuer_path: NormalisedURLPath,
+    ):
         self.override = override
         self.issuer_domain = issuer_domain
         self.issuer_path = issuer_path
 
 
 def validate_and_normalise_user_input(
-        app_info: AppInfo,
-        issuer: Union[str, None] = None,
-        override: Union[InputOverrideConfig, None] = None):
+    app_info: AppInfo,
+    issuer: Union[str, None] = None,
+    override: Union[InputOverrideConfig, None] = None,
+):
     if issuer is None:
         issuer_domain = app_info.api_domain
         issuer_path = app_info.api_base_path
@@ -90,13 +101,20 @@ def validate_and_normalise_user_input(
 
     if not issuer_path.equals(app_info.api_base_path):
         raise Exception(
-            &#39;The path of the issuer URL must be equal to the apiBasePath. The default value is /auth&#39;)
+            &#34;The path of the issuer URL must be equal to the apiBasePath. The default value is /auth&#34;
+        )
+
+    if override is not None and not isinstance(override, InputOverrideConfig):  # type: ignore
+        raise ValueError(&#34;override must be an instance of InputOverrideConfig or None&#34;)
 
     if override is None:
         override = InputOverrideConfig()
 
-    return OpenIdConfig(OverrideConfig(
-        functions=override.functions, apis=override.apis), issuer_domain, issuer_path)</code></pre>
+    return OpenIdConfig(
+        OverrideConfig(functions=override.functions, apis=override.apis),
+        issuer_domain,
+        issuer_path,
+    )</code></pre>
 </details>
 </section>
 <section>
@@ -111,31 +129,6 @@ def validate_and_normalise_user_input(
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def validate_and_normalise_user_input(
-        app_info: AppInfo,
-        issuer: Union[str, None] = None,
-        override: Union[InputOverrideConfig, None] = None):
-    if issuer is None:
-        issuer_domain = app_info.api_domain
-        issuer_path = app_info.api_base_path
-    else:
-        issuer_domain = NormalisedURLDomain(issuer)
-        issuer_path = NormalisedURLPath(issuer)
-
-    if not issuer_path.equals(app_info.api_base_path):
-        raise Exception(
-            &#39;The path of the issuer URL must be equal to the apiBasePath. The default value is /auth&#39;)
-
-    if override is None:
-        override = InputOverrideConfig()
-
-    return OpenIdConfig(OverrideConfig(
-        functions=override.functions, apis=override.apis), issuer_domain, issuer_path)</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -153,10 +146,12 @@ def validate_and_normalise_user_input(
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class InputOverrideConfig:
-    def __init__(self, functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
-                 apis: Union[Callable[[APIInterface],
-                                      APIInterface], None] = None,
-                 jwt_feature: Union[JWTOverrideConfig, None] = None):
+    def __init__(
+        self,
+        functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
+        apis: Union[Callable[[APIInterface], APIInterface], None] = None,
+        jwt_feature: Union[JWTOverrideConfig, None] = None,
+    ):
         self.functions = functions
         self.apis = apis
         self.jwt_feature = jwt_feature</code></pre>
@@ -173,8 +168,12 @@ def validate_and_normalise_user_input(
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class OpenIdConfig:
-    def __init__(self, override: OverrideConfig,
-                 issuer_domain: NormalisedURLDomain, issuer_path: NormalisedURLPath):
+    def __init__(
+        self,
+        override: OverrideConfig,
+        issuer_domain: NormalisedURLDomain,
+        issuer_path: NormalisedURLPath,
+    ):
         self.override = override
         self.issuer_domain = issuer_domain
         self.issuer_path = issuer_path</code></pre>
@@ -191,8 +190,11 @@ def validate_and_normalise_user_input(
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class OverrideConfig:
-    def __init__(self, functions: Union[Callable[[RecipeInterface], RecipeInterface],
-                                        None] = None, apis: Union[Callable[[APIInterface], APIInterface], None] = None):
+    def __init__(
+        self,
+        functions: Union[Callable[[RecipeInterface], RecipeInterface], None] = None,
+        apis: Union[Callable[[APIInterface], APIInterface], None] = None,
+    ):
         self.functions = functions
         self.apis = apis</code></pre>
 </details>
@@ -201,7 +203,7 @@ def validate_and_normalise_user_input(
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -233,7 +235,7 @@ def validate_and_normalise_user_input(
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>

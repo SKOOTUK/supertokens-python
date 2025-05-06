@@ -13,18 +13,44 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
+
+from supertokens_python.recipe.session.session_request_functions import (
+    get_session_from_request,
+)
 
 if TYPE_CHECKING:
-    from supertokens_python.recipe.session.interfaces import (APIInterface,
-                                                              APIOptions)
+    from supertokens_python.recipe.session.interfaces import (
+        APIInterface,
+        APIOptions,
+    )
+
+from supertokens_python.utils import send_200_response
 
 
-async def handle_signout_api(api_implementation: APIInterface, api_options: APIOptions):
-    if api_implementation.disable_signout_post or api_implementation.signout_post is None:
+async def handle_signout_api(
+    api_implementation: APIInterface,
+    api_options: APIOptions,
+    user_context: Dict[str, Any],
+):
+    if (
+        api_implementation.disable_signout_post
+        or api_implementation.signout_post is None  # type: ignore
+    ):
         return None
-    response = await api_implementation.signout_post(api_options, {})
+
+    session = await get_session_from_request(
+        api_options.request,
+        api_options.config,
+        api_options.recipe_implementation,
+        session_required=True,
+        override_global_claim_validators=lambda _, __, ___: [],
+        user_context=user_context,
+    )
+
+    assert session is not None
+
+    response = await api_implementation.signout_post(session, api_options, user_context)
     if api_options.response is None:
         raise Exception("Should never come here")
-    api_options.response.set_json_content(response.to_json())
-    return api_options.response
+    return send_200_response(response.to_json(), api_options.response)

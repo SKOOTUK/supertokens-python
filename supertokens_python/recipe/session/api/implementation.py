@@ -13,46 +13,87 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 from supertokens_python.normalised_url_path import NormalisedURLPath
-from supertokens_python.recipe.session.interfaces import (APIInterface,
-                                                          SignOutOkayResponse)
+from supertokens_python.recipe.session.interfaces import (
+    APIInterface,
+    SessionClaimValidator,
+    SignOutOkayResponse,
+)
+from supertokens_python.types import MaybeAwaitable
 from supertokens_python.utils import normalise_http_method
 
 if TYPE_CHECKING:
-    from supertokens_python.recipe.session.interfaces import APIOptions, SignOutResponse
+    from supertokens_python.recipe.session.interfaces import APIOptions
+
     from ..interfaces import SessionContainer
 
 from typing import Any, Dict
 
-from supertokens_python.recipe.session.exceptions import UnauthorisedError
+from ..session_request_functions import (
+    get_session_from_request,
+    refresh_session_in_request,
+)
 
 
 class APIImplementation(APIInterface):
+    async def refresh_post(
+        self, api_options: APIOptions, user_context: Dict[str, Any]
+    ) -> SessionContainer:
+        return await refresh_session_in_request(
+            api_options.request,
+            user_context,
+            api_options.config,
+            api_options.recipe_implementation,
+        )
 
-    async def refresh_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -> None:
-        await api_options.recipe_implementation.refresh_session(api_options.request, user_context)
-
-    async def signout_post(self, api_options: APIOptions, user_context: Dict[str, Any]) -> SignOutResponse:
-        try:
-            session = await api_options.recipe_implementation.get_session(request=api_options.request, user_context=user_context, anti_csrf_check=None, session_required=True)
-        except UnauthorisedError:
-            return SignOutOkayResponse()
-
-        if session is None:
-            raise Exception('Session is undefined. Should not come here.')
+    async def signout_post(
+        self,
+        session: SessionContainer,
+        api_options: APIOptions,
+        user_context: Dict[str, Any],
+    ) -> SignOutOkayResponse:
         await session.revoke_session(user_context)
         return SignOutOkayResponse()
 
-    async def verify_session(self, api_options: APIOptions,
-                             anti_csrf_check: Union[bool, None],
-                             session_required: bool, user_context: Dict[str, Any]) -> Union[SessionContainer, None]:
+    async def verify_session(
+        self,
+        api_options: APIOptions,
+        anti_csrf_check: Union[bool, None],
+        session_required: bool,
+        check_database: bool,
+        override_global_claim_validators: Optional[
+            Callable[
+                [List[SessionClaimValidator], SessionContainer, Dict[str, Any]],
+                MaybeAwaitable[List[SessionClaimValidator]],
+            ]
+        ],
+        user_context: Dict[str, Any],
+    ) -> Union[SessionContainer, None]:
         method = normalise_http_method(api_options.request.method())
-        if method in ('options', 'trace'):
+        if method in ("options", "trace"):
+            if session_required:
+                raise Exception(f"verify_session cannot be used with {method} method")
             return None
         incoming_path = NormalisedURLPath(api_options.request.get_path())
         refresh_token_path = api_options.config.refresh_token_path
-        if incoming_path.equals(refresh_token_path) and method == 'post':
-            return await api_options.recipe_implementation.refresh_session(api_options.request, user_context)
-        return await api_options.recipe_implementation.get_session(api_options.request, anti_csrf_check, session_required, user_context)
+
+        if incoming_path.equals(refresh_token_path) and method == "post":
+            return await refresh_session_in_request(
+                api_options.request,
+                user_context,
+                api_options.config,
+                api_options.recipe_implementation,
+            )
+
+        return await get_session_from_request(
+            api_options.request,
+            api_options.config,
+            api_options.recipe_implementation,
+            session_required=session_required,
+            anti_csrf_check=anti_csrf_check,
+            check_database=check_database,
+            override_global_claim_validators=override_global_claim_validators,
+            user_context=user_context,
+        )

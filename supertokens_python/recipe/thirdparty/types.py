@@ -11,9 +11,14 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from typing import Callable, Dict, List, Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union
 
 from supertokens_python.framework.request import BaseRequest
+
+if TYPE_CHECKING:
+    from supertokens_python.types import User
 
 
 class ThirdPartyInfo:
@@ -21,26 +26,69 @@ class ThirdPartyInfo:
         self.user_id = third_party_user_id
         self.id = third_party_id
 
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, self.__class__)
+            and self.user_id == other.user_id
+            and self.id == other.id
+        )
 
-class User:
-    def __init__(self, user_id: str, email: str, time_joined: int,
-                 third_party_info: ThirdPartyInfo):
-        self.user_id: str = user_id
-        self.email: str = email
-        self.time_joined: int = time_joined
-        self.third_party_info: ThirdPartyInfo = third_party_info
+    def to_json(self) -> Dict[str, Any]:
+        return {"userId": self.user_id, "id": self.id}
+
+    @staticmethod
+    def from_json(json: Dict[str, Any]) -> "ThirdPartyInfo":
+        return ThirdPartyInfo(json["userId"], json["id"])
+
+
+class RawUserInfoFromProvider:
+    def __init__(
+        self,
+        from_id_token_payload: Optional[Dict[str, Any]],
+        from_user_info_api: Optional[Dict[str, Any]],
+    ):
+        self.from_id_token_payload = from_id_token_payload
+        self.from_user_info_api = from_user_info_api
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "fromIdTokenPayload": self.from_id_token_payload,
+            "fromUserInfoApi": self.from_user_info_api,
+        }
 
 
 class UserInfoEmail:
-    def __init__(self, email: str, email_verified: bool):
+    """
+    Details about the user's - generally primary - email.
+    """
+
+    def __init__(self, email: str, is_verified: bool):
         self.id: str = email
-        self.is_verified: bool = email_verified
+        self.is_verified: bool = is_verified
+
+    def to_json(self) -> Dict[str, Any]:
+        return {"id": self.id, "isVerified": self.is_verified}
 
 
 class UserInfo:
-    def __init__(self, user_id: str, email: Union[UserInfoEmail, None] = None):
-        self.user_id: str = user_id
+    def __init__(
+        self,
+        third_party_user_id: str,
+        email: Union[UserInfoEmail, None] = None,
+        raw_user_info_from_provider: Optional[RawUserInfoFromProvider] = None,
+    ):
+        self.third_party_user_id: str = third_party_user_id
         self.email: Union[UserInfoEmail, None] = email
+        self.raw_user_info_from_provider = (
+            raw_user_info_from_provider or RawUserInfoFromProvider({}, {})
+        )
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "thirdPartyUserId": self.third_party_user_id,
+            "email": self.email.to_json() if self.email is not None else None,
+            "rawUserInfoFromProvider": self.raw_user_info_from_provider.to_json(),
+        }
 
 
 class AccessTokenAPI:
@@ -50,8 +98,9 @@ class AccessTokenAPI:
 
 
 class AuthorisationRedirectAPI:
-    def __init__(self, url: str,
-                 params: Dict[str, Union[Callable[[BaseRequest], str], str]]):
+    def __init__(
+        self, url: str, params: Dict[str, Union[Callable[[BaseRequest], str], str]]
+    ):
         self.url = url
         self.params = params
 
@@ -62,8 +111,5 @@ class SignInUpResponse:
         self.is_new_user = is_new_user
 
 
-class UsersResponse:
-    def __init__(self, users: List[User],
-                 next_pagination_token: Union[str, None]):
-        self.users = users
-        self.next_pagination_token = next_pagination_token
+class ThirdPartyIngredients:
+    pass

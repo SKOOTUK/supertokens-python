@@ -13,7 +13,7 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, NoReturn
 
 from supertokens_python.exceptions import SuperTokensError
 
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .types import ErrorFormField
 
 
-def raise_form_field_exception(msg: str, form_fields: List[ErrorFormField]):
+def raise_form_field_exception(msg: str, form_fields: List[ErrorFormField]) -> NoReturn:
     raise FieldError(msg, form_fields)
 
 
@@ -37,8 +37,5 @@ class FieldError(SuperTokensEmailPasswordError):
     def get_json_form_fields(self) -> List[Dict[str, Any]]:
         form_fields: List[Dict[str, Any]] = []
         for form_field in self.form_fields:
-            form_fields.append({
-                'id': form_field.id,
-                'error': form_field.error
-            })
+            form_fields.append({"id": form_field.id, "error": form_field.error})
         return form_fields

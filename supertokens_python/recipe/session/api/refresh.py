@@ -13,18 +13,26 @@
 # under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
-    from supertokens_python.recipe.session.interfaces import (APIInterface,
-                                                              APIOptions)
+    from supertokens_python.recipe.session.interfaces import APIInterface, APIOptions
+
+from supertokens_python.utils import send_200_response
 
 
-async def handle_refresh_api(api_implementation: APIInterface, api_options: APIOptions):
-    if api_implementation.disable_refresh_post or api_implementation.refresh_post is None:
+async def handle_refresh_api(
+    api_implementation: APIInterface,
+    api_options: APIOptions,
+    user_context: Dict[str, Any],
+):
+    if (
+        api_implementation.disable_refresh_post
+        or api_implementation.refresh_post is None  # type: ignore
+    ):
         return None
-    await api_implementation.refresh_post(api_options, {})
+
+    await api_implementation.refresh_post(api_options, user_context)
     if api_options.response is None:
         raise Exception("Should never come here")
-    api_options.response.set_json_content({})
-    return api_options.response
+    return send_200_response({}, api_options.response)

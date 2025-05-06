@@ -21,14 +21,22 @@ if TYPE_CHECKING:
 
 
 class BaseRequest(ABC):
-
     def __init__(self):
         self.wrapper_used = True
         self.request = None
 
     @abstractmethod
+    def get_original_url(self) -> str:
+        pass
+
+    @abstractmethod
     def get_query_param(
-            self, key: str, default: Union[str, None] = None) -> Union[str, None]:
+        self, key: str, default: Union[str, None] = None
+    ) -> Union[str, None]:
+        pass
+
+    @abstractmethod
+    def get_query_params(self) -> Dict[str, Any]:
         pass
 
     @abstractmethod
@@ -38,6 +46,14 @@ class BaseRequest(ABC):
     @abstractmethod
     async def form_data(self) -> Dict[str, Any]:
         pass
+
+    async def get_json_or_form_data(self) -> Union[Dict[str, Any], None]:
+        content_type = self.get_header("Content-Type")
+        if content_type is None:
+            return None
+        if content_type.startswith("application/json"):
+            return await self.json()
+        return await self.form_data()
 
     @abstractmethod
     def method(self) -> str:
@@ -58,6 +74,13 @@ class BaseRequest(ABC):
     @abstractmethod
     def set_session(self, session: SessionContainer):
         pass
+
+    @abstractmethod
+    def set_session_as_none(self):
+        """
+        This function is used to set the request's session variable to None.
+        See https://github.com/supertokens/supertokens-python/issues/90
+        """
 
     @abstractmethod
     def get_path(self) -> str:

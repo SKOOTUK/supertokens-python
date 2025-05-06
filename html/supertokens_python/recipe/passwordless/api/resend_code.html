@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.11.0" />
 <title>supertokens_python.recipe.passwordless.api.resend_code API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Documentation for supertokens_python - SuperTokens Python SDK" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -39,12 +39,23 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from typing import Any, Dict
+
+from supertokens_python.auth_utils import load_session_in_auth_api_if_needed
 from supertokens_python.exceptions import raise_bad_input_exception
-from supertokens_python.recipe.passwordless.interfaces import (APIInterface,
-                                                               APIOptions)
+from supertokens_python.recipe.passwordless.interfaces import APIInterface, APIOptions
+from supertokens_python.utils import (
+    get_normalised_should_try_linking_with_session_user_flag,
+    send_200_response,
+)
 
 
-async def resend_code(api_implementation: APIInterface, api_options: APIOptions):
+async def resend_code(
+    api_implementation: APIInterface,
+    tenant_id: str,
+    api_options: APIOptions,
+    user_context: Dict[str, Any],
+):
     if api_implementation.disable_resend_code_post:
         return None
     body = await api_options.request.json()
@@ -52,19 +63,38 @@ async def resend_code(api_implementation: APIInterface, api_options: APIOptions)
     if body is None:
         raise_bad_input_exception(&#34;Please provide a JSON body&#34;)
 
-    if &#39;preAuthSessionId&#39; not in body:
-        raise_bad_input_exception(&#39;Please provide preAuthSessionId&#39;)
+    if &#34;preAuthSessionId&#34; not in body:
+        raise_bad_input_exception(&#34;Please provide preAuthSessionId&#34;)
 
-    if &#39;deviceId&#39; not in body:
-        raise_bad_input_exception(&#39;Please provide deviceId&#39;)
+    if &#34;deviceId&#34; not in body:
+        raise_bad_input_exception(&#34;Please provide deviceId&#34;)
 
-    pre_auth_session_id = body[&#39;preAuthSessionId&#39;]
-    device_id = body[&#39;deviceId&#39;]
+    pre_auth_session_id = body[&#34;preAuthSessionId&#34;]
+    device_id = body[&#34;deviceId&#34;]
 
-    result = await api_implementation.resend_code_post(device_id, pre_auth_session_id, api_options, {})
-    api_options.response.set_json_content(result.to_json())
+    should_try_linking_with_session_user = (
+        get_normalised_should_try_linking_with_session_user_flag(
+            api_options.request, body
+        )
+    )
 
-    return api_options.response</code></pre>
+    session = await load_session_in_auth_api_if_needed(
+        api_options.request, should_try_linking_with_session_user, user_context
+    )
+
+    if session is not None:
+        tenant_id = session.get_tenant_id()
+
+    result = await api_implementation.resend_code_post(
+        device_id,
+        pre_auth_session_id,
+        session,
+        should_try_linking_with_session_user,
+        tenant_id,
+        api_options,
+        user_context,
+    )
+    return send_200_response(result.to_json(), api_options.response)</code></pre>
 </details>
 </section>
 <section>
@@ -75,36 +105,10 @@ async def resend_code(api_implementation: APIInterface, api_options: APIOptions)
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="supertokens_python.recipe.passwordless.api.resend_code.resend_code"><code class="name flex">
-<span>async def <span class="ident">resend_code</span></span>(<span>api_implementation: <a title="supertokens_python.recipe.passwordless.interfaces.APIInterface" href="../interfaces.html#supertokens_python.recipe.passwordless.interfaces.APIInterface">APIInterface</a>, api_options: <a title="supertokens_python.recipe.passwordless.interfaces.APIOptions" href="../interfaces.html#supertokens_python.recipe.passwordless.interfaces.APIOptions">APIOptions</a>)</span>
+<span>async def <span class="ident">resend_code</span></span>(<span>api_implementation: <a title="supertokens_python.recipe.passwordless.interfaces.APIInterface" href="../interfaces.html#supertokens_python.recipe.passwordless.interfaces.APIInterface">APIInterface</a>, tenant_id: str, api_options: <a title="supertokens_python.recipe.passwordless.interfaces.APIOptions" href="../interfaces.html#supertokens_python.recipe.passwordless.interfaces.APIOptions">APIOptions</a>, user_context: Dict[str, Any])</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">async def resend_code(api_implementation: APIInterface, api_options: APIOptions):
-    if api_implementation.disable_resend_code_post:
-        return None
-    body = await api_options.request.json()
-
-    if body is None:
-        raise_bad_input_exception(&#34;Please provide a JSON body&#34;)
-
-    if &#39;preAuthSessionId&#39; not in body:
-        raise_bad_input_exception(&#39;Please provide preAuthSessionId&#39;)
-
-    if &#39;deviceId&#39; not in body:
-        raise_bad_input_exception(&#39;Please provide deviceId&#39;)
-
-    pre_auth_session_id = body[&#39;preAuthSessionId&#39;]
-    device_id = body[&#39;deviceId&#39;]
-
-    result = await api_implementation.resend_code_post(device_id, pre_auth_session_id, api_options, {})
-    api_options.response.set_json_content(result.to_json())
-
-    return api_options.response</code></pre>
-</details>
 </dd>
 </dl>
 </section>
@@ -112,7 +116,7 @@ async def resend_code(api_implementation: APIInterface, api_options: APIOptions)
 </section>
 </article>
 <nav id="sidebar">
-<h1>Index</h1>
+<h2>Index</h2>
 <div class="toc">
 <ul></ul>
 </div>
@@ -131,7 +135,7 @@ async def resend_code(api_implementation: APIInterface, api_options: APIOptions)
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.11.0</a>.</p>
 </footer>
 </body>
 </html>
