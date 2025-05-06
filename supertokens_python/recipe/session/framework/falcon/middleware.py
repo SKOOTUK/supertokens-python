@@ -38,13 +38,16 @@ def verify_session(
     recipe = SessionRecipe.get_instance()
 
     try:
-        session = sync(
+        session = sync(  # type: ignore
             recipe.verify_session(
                 request,
                 anti_csrf_check,
                 session_required,
-                user_context
-            )
+                check_database=True,
+                override_global_claim_validators=None,  # override_global_claim_validators
+                user_context=user_context
+            ),
+            user_context=user_context
         )
     except SuperTokensError as e:
         logger.info(f"Authorization Error: {e}")
