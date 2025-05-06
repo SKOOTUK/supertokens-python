@@ -47,7 +47,6 @@ def verify_session(
                 override_global_claim_validators=None,  # override_global_claim_validators
                 user_context=user_context
             ),
-            user_context=user_context
         )
     except SuperTokensError as e:
         logger.info(f"Authorization Error: {e}")
