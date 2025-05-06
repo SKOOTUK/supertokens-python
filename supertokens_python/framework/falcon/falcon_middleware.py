@@ -41,7 +41,8 @@ class Middleware:
 
         request_ = FalconRequest(req)
         response_ = FalconResponse(resp)
-        result = sync(st.middleware(request_, response_))
+        user_context = {}
+        result = sync(st.middleware(request_, response_, user_context))
 
         if result is not None:
             return result.response
@@ -52,13 +53,13 @@ class Middleware:
         from supertokens_python.framework.falcon.falcon_response import \
             FalconResponse
         from supertokens_python.recipe.session import SessionContainer
-        from supertokens_python.supertokens import manage_cookies_post_response
+        from supertokens_python.supertokens import manage_session_post_response
 
         response_ = FalconResponse(resp)
         request_ = FalconRequest(req)
         session = request_.get_session()
 
         if isinstance(session, SessionContainer):
-            manage_cookies_post_response(session, response_)
+            manage_session_post_response(session, response_, {})
 
         return response_.response

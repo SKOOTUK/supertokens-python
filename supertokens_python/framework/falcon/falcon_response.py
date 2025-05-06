@@ -14,12 +14,12 @@
 
 import json
 from datetime import datetime
+from typing import Any
 
 from supertokens_python.framework.response import BaseResponse
 
 
 class FalconResponse(BaseResponse):
-
     def __init__(self, resp=None):
         super().__init__({})
         self.response = resp
@@ -27,7 +27,7 @@ class FalconResponse(BaseResponse):
         self.response_sent = False
         self.status_set = False
 
-    def set_html_content(self, content):
+    def set_html_content(self, content: str) -> None:
         if not self.response_sent:
             self.response.text = content
             self.set_header('Content-Type', 'text/html')
@@ -44,11 +44,11 @@ class FalconResponse(BaseResponse):
         secure: bool = False,
         httponly: bool = False,
         samesite: str = "lax"
-    ):
+    ) -> None:
         self.response.set_cookie(
             key,
             value,
-            expires=datetime.utcfromtimestamp(expires / 1000),
+            expires=datetime.utcfromtimestamp(expires / 1000) if expires else None,
             max_age=max_age,
             domain=domain,
             path=path,
@@ -57,16 +57,13 @@ class FalconResponse(BaseResponse):
             same_site=samesite
         )
 
-        for item in self.response._wsgi_headers():
-            self.response.append_header(item[0], item[1])
-
-    def set_header(self, key, value):
+    def set_header(self, key: str, value: str) -> None:
         self.response.set_header(key, value)
 
-    def get_header(self, key):
+    def get_header(self, key: str) -> Any:
         return self.response.get_header(key, None)
 
-    def set_status_code(self, status_code):
+    def set_status_code(self, status_code: int) -> None:
         if not self.status_set:
             self.response.status = status_code
             self.status_set = True
@@ -74,14 +71,22 @@ class FalconResponse(BaseResponse):
     def get_headers(self):
         return self.response.headers
 
-    def set_json_content(self, content):
+    def set_json_content(self, content: Any) -> None:
         if not self.response_sent:
             self.set_header('Content-Type', 'application/json; charset=utf-8')
-            self.response.data = json.dumps(
+            self.response.text = json.dumps(
                 content,
                 ensure_ascii=False,
                 allow_nan=False,
                 indent=None,
                 separators=(",", ":"),
-            ).encode("utf-8")
+            )
             self.response_sent = True
+
+    def remove_header(self, key: str) -> None:
+        if key in self.response.headers:
+            del self.response.headers[key]
+
+    def redirect(self, url: str, status_code: int) -> None:
+        self.set_status_code(status_code)
+        self.set_header("Location", url)
